@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-export const createLessonSchema = z.object({
+const lessonObjectSchema = z.object({
   classroom_id: z.string().uuid("Classe invalide"),
   subject_id: z.string().uuid("Matière invalide"),
   teacher_id: z.string().uuid("Enseignant invalide"),
@@ -12,7 +12,9 @@ export const createLessonSchema = z.object({
   end_time: z.string().regex(timePattern, "Format heure de fin invalide (HH:MM)"),
   establishment_id: z.string().uuid().optional(),
   academic_year_id: z.string().uuid().optional(),
-}).refine((data) => {
+});
+
+export const createLessonSchema = lessonObjectSchema.refine((data) => {
   const [startHour, startMin] = data.start_time.split(":").map(Number);
   const [endHour, endMin] = data.end_time.split(":").map(Number);
   const startVal = startHour! * 60 + startMin!;
@@ -23,7 +25,7 @@ export const createLessonSchema = z.object({
   path: ["end_time"],
 });
 
-export const updateLessonSchema = createLessonSchema.partial();
+export const updateLessonSchema = lessonObjectSchema.partial();
 
 export const listLessonsSchema = z.object({
   establishment_id: z.string().uuid().optional(),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -50,7 +50,7 @@ import {
   Area,
 } from "recharts";
 
-export default function ReportsPage() {
+function ReportsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") || "academic";
@@ -661,5 +661,17 @@ export default function ReportsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-64 flex items-center justify-center text-muted-foreground animate-pulse">
+        Chargement des rapports...
+      </div>
+    }>
+      <ReportsPageInner />
+    </Suspense>
   );
 }

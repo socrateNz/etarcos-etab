@@ -3,7 +3,7 @@ import { paginationSchema } from "@/schemas/common";
 
 const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-export const createExamSchema = z.object({
+const examObjectSchema = z.object({
   name: z.string().min(2, "Nom trop court").max(150),
   classroom_id: z.string().uuid("Classe invalide").optional().nullable().or(z.literal("")),
   subject_id: z.string().uuid("Matière invalide"),
@@ -15,7 +15,9 @@ export const createExamSchema = z.object({
   coefficient: z.coerce.number().positive("Coefficient invalide").default(1.00),
   establishment_id: z.string().uuid().optional(),
   academic_year_id: z.string().uuid().optional(),
-}).refine((data) => {
+});
+
+export const createExamSchema = examObjectSchema.refine((data) => {
   if (data.start_time && data.end_time) {
     const [startHour, startMin] = data.start_time.split(":").map(Number);
     const [endHour, endMin] = data.end_time.split(":").map(Number);
@@ -29,7 +31,7 @@ export const createExamSchema = z.object({
   path: ["end_time"],
 });
 
-export const updateExamSchema = createExamSchema.partial();
+export const updateExamSchema = examObjectSchema.partial();
 
 export const listExamsSchema = paginationSchema.extend({
   establishment_id: z.string().uuid().optional(),
