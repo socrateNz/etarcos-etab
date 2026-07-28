@@ -12,6 +12,9 @@ import { useStudents } from "@/features/students/hooks/use-students";
 import { useOwnerStore } from "@/store/owner-store";
 import { Badge } from "@/components/ui/badge";
 
+import { getClassroomAveragesAction, getStudentReportCardDetailsAction } from "@/features/grades/actions";
+import { useQuery } from "@tanstack/react-query";
+
 export default function ReportCardsPage() {
   const { selectedEstablishmentId } = useOwnerStore();
 
@@ -31,41 +34,31 @@ export default function ReportCardsPage() {
     }
   }, [classrooms, selectedClassroomId]);
 
-  // Load students for selected classroom
-  const { data: studentsData, isLoading: studentsLoading } = useStudents({
-    classroom_id: selectedClassroomId || undefined,
+  // Load REAL averages calculated by PostgreSQL for the selected classroom & term
+  const { data: averagesData, isLoading: studentsLoading } = useQuery({
+    queryKey: ["classroom-averages", selectedClassroomId, selectedTerm, selectedEstablishmentId],
+    queryFn: async () => {
+      if (!selectedClassroomId) return [];
+      const res = await getClassroomAveragesAction(selectedClassroomId, selectedTerm, selectedEstablishmentId || undefined);
+      if (res.error) throw new Error(res.error);
+      return res.data ?? [];
+    },
+    enabled: !!selectedClassroomId,
   });
-  const students = studentsData?.data ?? [];
 
   const activeClassroomName = classrooms.find(c => c.id === selectedClassroomId)?.name || "Classe";
 
-  // Compute student list with averages & rankings
   const processedStudents = useMemo(() => {
-    if (!students || students.length === 0) return [];
-    
-    // Generate deterministic or database-derived averages for demo
-    const list = students.map((s, idx) => {
-      const sName = s.user?.name || "Élève";
-      // Create a deterministic average based on student name length/id
-      const avgSeed = (sName.charCodeAt(0) + sName.charCodeAt(sName.length - 1)) % 10;
-      const average = Number((10.5 + (avgSeed * 0.9) - (idx * 0.15)).toFixed(2));
-      
-      return {
-        ...s,
-        average: Math.min(20, Math.max(7, average)),
-        rank: idx + 1, // temporary rank based on index
-      };
-    });
-
-    // Sort by average descending
-    list.sort((a, b) => b.average - a.average);
-
-    // Reassign ranks
-    return list.map((item, idx) => ({
-      ...item,
-      rank: idx + 1,
+    return (averagesData ?? []).map((s) => ({
+      id: s.student_id,
+      student_number: s.student_number,
+      user: { name: s.student_name },
+      average: s.average ?? 0,
+      rank: s.rank ?? "—",
+      mention: s.mention,
     }));
-  }, [students]);
+  }, [averagesData]);
+
 
   // Filtered student list by search query
   const filteredStudents = useMemo(() => {
@@ -87,20 +80,24 @@ export default function ReportCardsPage() {
     return <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20">Blâmé</Badge>;
   };
 
-  // Detailed mock report card matrix
-  const reportMatrix = useMemo(() => {
-    if (!activeReportStudent) return [];
-    const seed = activeReportStudent.average;
-    return [
-      { subject: "Mathématiques", coef: 4, average: Math.min(20, Math.round(seed + 1.5)), classMax: 18, classMin: 6, appreciation: "Très bon travail. Régulier." },
-      { subject: "Physique-Chimie", coef: 3, average: Math.min(20, Math.round(seed + 2.0)), classMax: 17, classMin: 7, appreciation: "Excellent esprit d'analyse." },
-      { subject: "Français", coef: 3, average: Math.max(0, Math.round(seed - 1.5)), classMax: 15, classMin: 8, appreciation: "Doit s'investir davantage à l'écrit." },
-      { subject: "Anglais", coef: 2, average: Math.min(20, Math.round(seed + 0.5)), classMax: 16, classMin: 9, appreciation: "Bonne participation orale." },
-      { subject: "Histoire-Géographie", coef: 2, average: Math.min(20, Math.round(seed - 0.2)), classMax: 15, classMin: 8, appreciation: "Ensemble satisfaisant." },
-      { subject: "SVT", coef: 2, average: Math.min(20, Math.round(seed + 0.8)), classMax: 17, classMin: 7, appreciation: "Résultats solides." },
-      { subject: "EPS", coef: 1, average: 15, classMax: 18, classMin: 10, appreciation: "Bonne aptitude physique." },
-    ];
-  }, [activeReportStudent]);
+  // Detailed real report card matrix per subject
+  const { data: reportMatrixData } = useQuery({
+    queryKey: ["student-report-matrix", activeReportStudent?.id, selectedClassroomId, selectedTerm, selectedEstablishmentId],
+    queryFn: async () => {
+      if (!activeReportStudent?.id || !selectedClassroomId) return [];
+      const res = await getStudentReportCardDetailsAction(
+        activeReportStudent.id,
+        selectedClassroomId,
+        selectedTerm,
+        selectedEstablishmentId || undefined
+      );
+      if (res.error) throw new Error(res.error);
+      return res.data ?? [];
+    },
+    enabled: !!activeReportStudent?.id && !!selectedClassroomId,
+  });
+
+  const reportMatrix = reportMatrixData ?? [];
 
   return (
     <div className="space-y-6">
@@ -279,7 +276,7 @@ export default function ReportCardsPage() {
                   </div>
                   <div className="space-y-1.5 text-right print:text-right">
                     <p><span className="text-muted-foreground print:text-gray-600 font-semibold">Matricule :</span> <span className="font-mono text-white print:text-black font-bold">{activeReportStudent.student_number}</span></p>
-                    <p><span className="text-muted-foreground print:text-gray-600 font-semibold">Rang :</span> <strong className="text-white print:text-black">{activeReportStudent.rank}er / {students.length}</strong></p>
+                    <p><span className="text-muted-foreground print:text-gray-600 font-semibold">Rang :</span> <strong className="text-white print:text-black">{activeReportStudent.rank}er / {processedStudents.length}</strong></p>
                   </div>
                 </div>
 
@@ -301,9 +298,9 @@ export default function ReportCardsPage() {
                         <tr key={idx} className="print:text-black">
                           <td className="px-3 py-2 border-r font-semibold text-white print:text-black">{m.subject}</td>
                           <td className="px-3 py-2 border-r text-center">{m.coef}</td>
-                          <td className="px-3 py-2 border-r text-center font-bold text-white print:text-black">{m.average} /20</td>
-                          <td className="px-3 py-2 border-r text-center">{m.classMin}</td>
-                          <td className="px-3 py-2 border-r text-center">{m.classMax}</td>
+                          <td className="px-3 py-2 border-r text-center font-bold text-white print:text-black">{m.average !== null ? `${m.average} /20` : "—"}</td>
+                          <td className="px-3 py-2 border-r text-center">{m.classMin !== null ? `${m.classMin} /20` : "—"}</td>
+                          <td className="px-3 py-2 border-r text-center">{m.classMax !== null ? `${m.classMax} /20` : "—"}</td>
                           <td className="px-3 py-2 italic text-muted-foreground print:text-gray-600">{m.appreciation}</td>
                         </tr>
                       ))}

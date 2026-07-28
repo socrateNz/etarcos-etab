@@ -401,6 +401,82 @@ export interface Book {
 }
 
 // ============================================
+// EXTENDED SCHEMA (migration 002 + 003)
+// ============================================
+
+export interface LibraryBook {
+  id: string;
+  establishment_id: string;
+  title: string;
+  author: string;
+  isbn: string | null;
+  category: string | null;
+  publisher: string | null;
+  published_year: number | null;
+  quantity: number;
+  available_qty: number;
+  location: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryLoan {
+  id: string;
+  establishment_id: string;
+  book_id: string;
+  borrower_id: string;
+  loan_date: string;
+  due_date: string;
+  return_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  establishment_id: string;
+  name: string;
+  code: string;
+  category: string | null;
+  description: string | null;
+  quantity: number;
+  unit: string;
+  location: string | null;
+  supplier_info: Json | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockMovement {
+  id: string;
+  establishment_id: string;
+  item_id: string;
+  quantity: number;
+  type: "purchase" | "usage" | "loss" | "return";
+  description: string | null;
+  recorded_by: string;
+  created_at: string;
+}
+
+export interface NewsPost {
+  id: string;
+  establishment_id: string;
+  title: string;
+  content: string;
+  excerpt: string | null;
+  cover_url: string | null;
+  is_published: boolean;
+  published_at: string | null;
+  author_id: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  // Relations
+  author?: { id: string; name: string } | null;
+}
+
+// ============================================
 // AUDIT
 // ============================================
 

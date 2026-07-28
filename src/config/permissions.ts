@@ -48,4 +48,9 @@ export const ALL_PERMISSION_DETAILS: PermissionDetail[] = [
   { slug: "cycles:create", name: "Créer cycles/niveaux", module: "cycles", action: "create", description: "Ajouter cycles et niveaux" },
   { slug: "cycles:edit", name: "Modifier cycles/niveaux", module: "cycles", action: "edit", description: "Mettre à jour la structure académique" },
   { slug: "cycles:delete", name: "Supprimer cycles/niveaux", module: "cycles", action: "delete", description: "Supprimer cycles ou niveaux" },
+  // News
+  { slug: "news:view", name: "Voir les actualités", module: "news", action: "view", description: "Consulter les actualités et annonces" },
+  { slug: "news:create", name: "Créer une actualité", module: "news", action: "create", description: "Publier une nouvelle annonce" },
+  { slug: "news:edit", name: "Modifier une actualité", module: "news", action: "edit", description: "Mettre à jour une annonce" },
+  { slug: "news:delete", name: "Supprimer une actualité", module: "news", action: "delete", description: "Supprimer une annonce" },
 ];

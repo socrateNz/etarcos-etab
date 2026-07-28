@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutDashboard, School, BookOpen, CalendarDays, ClipboardList, PenLine,
@@ -48,6 +49,11 @@ export function CommandPalette() {
   const { theme, setTheme } = useTheme();
   const { isCommandOpen, setCommandOpen } = useUIStore();
   const { canAccessModule } = usePermissions();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const accessibleModules = MODULES.filter((m) => canAccessModule(m.key));
 

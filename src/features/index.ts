@@ -26,3 +26,9 @@ export * as attendanceFeature from "./attendance";
 export * as paymentsFeature from "./payments";
 export * as expensesFeature from "./expenses";
 export * as disciplineFeature from "./discipline";
+export * as libraryFeature from "./library";
+export * as inventoryFeature from "./inventory";
+export * as newsFeature from "./news";
+
+
+

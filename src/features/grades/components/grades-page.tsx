@@ -15,6 +15,8 @@ import type { GradeEntryItem } from "../schemas";
 type PeriodType = "T1" | "T2" | "T3" | "S1" | "S2";
 type EvalType = "test" | "exam" | "homework" | "oral" | "practical";
 
+const EMPTY_GRADES: any[] = [];
+
 export function GradesPage() {
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("all");
@@ -34,7 +36,7 @@ export function GradesPage() {
   // Query actual grades or initial student list
   const isEnabled = selectedClassId !== "all" && selectedSubjectId !== "all";
   const {
-    data: gradesData = [],
+    data: rawGradesData,
     isLoading: loadingGrades,
     isError,
     error,
@@ -45,6 +47,8 @@ export function GradesPage() {
     selectedType,
     isEnabled
   );
+
+  const gradesData = rawGradesData ?? EMPTY_GRADES;
 
   const saveGrades = useSaveGrades();
 

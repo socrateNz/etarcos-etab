@@ -80,7 +80,8 @@ async function createSuperAdmin() {
         .insert({
           name: 'Super Administrateur',
           slug: 'super_admin',
-          description: 'Accès complet à la plateforme SaaS'
+          description: 'Accès complet à la plateforme SaaS',
+          is_system: true   // ← Requis par la policy is_super_admin() en RLS
         })
         .select()
         .single();

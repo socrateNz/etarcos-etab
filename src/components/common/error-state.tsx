@@ -8,16 +8,23 @@ import { cn } from "@/lib/utils";
 interface ErrorStateProps {
   title?: string;
   description?: string;
+  message?: string;
   onRetry?: () => void;
   className?: string;
 }
 
 export function ErrorState({
   title = "Une erreur est survenue",
-  description = "Nous n'avons pas pu charger les données. Veuillez réessayer ou contacter le support si le problème persiste.",
+  description,
+  message,
   onRetry,
   className,
 }: ErrorStateProps) {
+  const displayDescription =
+    message ??
+    description ??
+    "Nous n'avons pas pu charger les données. Veuillez réessayer ou contacter le support si le problème persiste.";
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -32,7 +39,7 @@ export function ErrorState({
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-1">{title}</h3>
       <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-        {description}
+        {displayDescription}
       </p>
       {onRetry && (
         <Button onClick={onRetry} variant="outline" className="gap-2">

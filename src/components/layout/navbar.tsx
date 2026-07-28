@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
@@ -47,6 +47,11 @@ export function Navbar() {
   const { toggleSidebar, isOpen } = useSidebarStore();
   const { isMobile } = useBreakpoint();
   const [searchFocus, setSearchFocus] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
   const roleMeta = user?.role ? SYSTEM_ROLES[user.role] : null;
@@ -234,29 +239,33 @@ export function Navbar() {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="text-muted-foreground hover:text-foreground"
         >
-          <AnimatePresence mode="wait" initial={false}>
-            {theme === "dark" ? (
-              <motion.div
-                key="sun"
-                initial={{ rotate: -90, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: 90, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Sun className="w-5 h-5" />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="moon"
-                initial={{ rotate: 90, opacity: 0 }}
-                animate={{ rotate: 0, opacity: 1 }}
-                exit={{ rotate: -90, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Moon className="w-5 h-5" />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {mounted ? (
+            <AnimatePresence mode="wait" initial={false}>
+              {theme === "dark" ? (
+                <motion.div
+                  key="sun"
+                  initial={{ rotate: -90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 90, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Sun className="w-5 h-5" />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="moon"
+                  initial={{ rotate: 90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: -90, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Moon className="w-5 h-5" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          ) : (
+            <div className="w-5 h-5" />
+          )}
         </Button>
 
         {/* Notifications */}
