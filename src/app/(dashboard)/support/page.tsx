@@ -57,7 +57,12 @@ const INITIAL_TICKETS: Ticket[] = [
   },
 ];
 
+import { UserGuideView } from "@/components/layout/user-guide-view";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { BookOpen } from "lucide-react";
+
 export default function SupportPage() {
+  const [activeTab, setActiveTab] = useState("guide");
   const [tickets, setTickets] = useState<Ticket[]>(INITIAL_TICKETS);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(INITIAL_TICKETS[0] || null);
   const [replyText, setReplyText] = useState("");
@@ -77,7 +82,7 @@ export default function SupportPage() {
         t.id === selectedTicket.id
           ? {
               ...t,
-              status: "pending", // automatiques à pending
+              status: "pending",
               replies: [...t.replies, newReply],
             }
           : t
@@ -105,12 +110,27 @@ export default function SupportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Tickets de Support & Assistance"
-        description="Répondez aux requêtes d'assistance des directeurs d'écoles et résolvez les anomalies."
+        title="Support & Manuel d'Utilisation"
+        description="Guide d'utilisation interactif par rôle et assistance technique."
         icon={HelpCircle}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="guide" className="gap-2">
+            <BookOpen className="w-4 h-4" /> Manuel d'Utilisation
+          </TabsTrigger>
+          <TabsTrigger value="tickets" className="gap-2">
+            <MessageSquare className="w-4 h-4" /> Tickets de Support ({tickets.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="guide">
+          <UserGuideView />
+        </TabsContent>
+
+        <TabsContent value="tickets">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left list panel */}
         <div className="md:col-span-1 bg-card rounded-xl border p-4 space-y-4">
           <h3 className="font-bold text-sm border-b pb-2">Boîte de Réception</h3>
@@ -239,6 +259,8 @@ export default function SupportPage() {
           )}
         </div>
       </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
