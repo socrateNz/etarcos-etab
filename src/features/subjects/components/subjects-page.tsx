@@ -151,7 +151,7 @@ export function SubjectsPage() {
                 setEditingSubject(null);
                 setFormOpen(true);
               }}
-              className="gap-2 bg-brand-500 hover:bg-brand-600 text-white"
+              className="gap-2 bg-brand-500 hover:bg-brand-600 text-slate-950 dark:text-white font-semibold"
             >
               <Plus className="size-4" />
               Nouvelle matière
@@ -189,6 +189,7 @@ export function SubjectsPage() {
           } else {
             await createSubject.mutateAsync(values as CreateSubjectInput);
           }
+          await refetch();
           setFormOpen(false);
           setEditingSubject(null);
         }}

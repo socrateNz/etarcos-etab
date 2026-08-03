@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Search, Trash2, Mail, Loader2, CheckSquare, XCircle } from "lucide-react";
+import { Users, Search, Trash2, Mail, Loader2, CheckSquare, XCircle, UserPlus, KeyRound, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { listUsersAction, updateUserStatusAction, deleteUserAction } from "@/app/actions/superadmin";
+import { updateUserStatusAction, deleteUserAction } from "@/app/actions/superadmin";
+import { listUsersScopedAction, resetUserPasswordAction } from "@/features/users/actions";
+import { UserFormDialog } from "@/components/common/user-form-dialog";
 
 interface User {
   id: string;
@@ -16,6 +19,7 @@ interface User {
   role: string;
   status: string;
   created_at: string;
+  requires_password_change?: boolean;
   establishment?: {
     name: string;
   } | null;
@@ -23,16 +27,28 @@ interface User {
 
 const roleColors: Record<string, string> = {
   super_admin: "bg-red-500/10 text-red-500 border-red-500/20",
-  admin: "bg-brand-500/10 text-brand-500 border-brand-500/20",
+  owner: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  director: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20",
+  censor: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+  accountant: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   teacher: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  student: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  secretary: "bg-teal-500/10 text-teal-500 border-teal-500/20",
+  librarian: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  lab_manager: "bg-violet-500/10 text-violet-500 border-violet-500/20",
+  student: "bg-slate-500/10 text-slate-500 border-slate-500/20",
   parent: "bg-purple-500/10 text-purple-500 border-purple-500/20",
 };
 
 const roleLabels: Record<string, string> = {
   super_admin: "Super Admin",
-  admin: "Directeur Etab",
+  owner: "Propriétaire",
+  director: "Directeur Etab",
+  censor: "Censeur",
+  accountant: "Comptable",
   teacher: "Enseignant",
+  secretary: "Secrétaire",
+  librarian: "Bibliothécaire",
+  lab_manager: "Resp. Labo",
   student: "Élève",
   parent: "Parent",
 };
@@ -41,6 +57,12 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [userFormOpen, setUserFormOpen] = useState(false);
+
+  // Reset password states
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Confirmation dialog states
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -48,7 +70,7 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const res = await listUsersAction();
+    const res = await listUsersScopedAction();
     if (res.data) {
       setUsers(res.data as any);
     }
@@ -65,6 +87,24 @@ export default function UsersPage() {
     if (res.success) {
       fetchUsers();
     }
+  };
+
+  const handleResetPassword = async (user: User) => {
+    setResettingId(user.id);
+    const res = await resetUserPasswordAction(user.id);
+    if (res.success && res.data) {
+      setResetResult(res.data);
+      fetchUsers();
+    }
+    setResettingId(null);
+  };
+
+  const handleCopyCredentials = () => {
+    if (!resetResult) return;
+    const text = `Identifiants pour ${resetResult.name} :\nEmail : ${resetResult.email}\nMot de passe temporaire : ${resetResult.tempPassword}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const onConfirmDeleteUser = async () => {
@@ -88,9 +128,13 @@ export default function UsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title="Comptes Utilisateurs"
-          description="Consultez et gérez l'ensemble des comptes utilisateurs inscrits sur la plateforme."
+          description="Consultez et gérez l'ensemble des comptes utilisateurs rattachés à votre structure."
           icon={Users}
         />
+        <Button onClick={() => setUserFormOpen(true)} className="gap-2 self-start sm:self-auto">
+          <UserPlus className="w-4 h-4" />
+          Créer un utilisateur
+        </Button>
       </div>
 
       {/* Toolbar */}
@@ -112,7 +156,6 @@ export default function UsersPage() {
             <p className="text-sm">Chargement des utilisateurs...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
-          // Use inline list count
           <div className="p-12 text-center text-muted-foreground">
             <Users className="w-12 h-12 mx-auto mb-3 opacity-20 text-brand-500" />
             <h3 className="font-semibold text-foreground mb-1">Aucun utilisateur</h3>
@@ -153,6 +196,22 @@ export default function UsersPage() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="inline-flex gap-1.5">
+                        {u.requires_password_change !== false && (
+                          <Button
+                            onClick={() => handleResetPassword(u)}
+                            size="icon-xs"
+                            variant="ghost"
+                            title="Générer / Réinitialiser un mot de passe temporaire"
+                            disabled={resettingId === u.id}
+                            className="text-indigo-500 hover:text-indigo-600 hover:bg-indigo-500/10"
+                          >
+                            {resettingId === u.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <KeyRound className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           onClick={() => handleToggleStatus(u)}
                           size="icon-xs"
@@ -180,6 +239,57 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {/* Creation Modal */}
+      <UserFormDialog
+        open={userFormOpen}
+        onOpenChange={setUserFormOpen}
+        onSuccess={fetchUsers}
+      />
+
+      {/* Reset Credentials Result Modal */}
+      <Dialog open={!!resetResult} onOpenChange={(open) => !open && setResetResult(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-indigo-500" />
+              Nouveau Mot de Passe Temporaire
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Un mot de passe temporaire a été généré pour {resetResult?.name}. Transmettez-le à l'utilisateur.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetResult && (
+            <div className="space-y-4 pt-2">
+              <div className="p-3 bg-muted/50 rounded-lg border border-border space-y-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground font-medium">Identifiant (Email) :</span>
+                  <p className="font-bold text-foreground font-mono mt-0.5">{resetResult.email}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground font-medium">Mot de passe temporaire :</span>
+                  <p className="font-bold text-primary font-mono text-sm mt-0.5">{resetResult.tempPassword}</p>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
+                ℹ️ Ce bouton disparaîtra automatiquement dès que {resetResult.name} se sera connecté et aura modifié ce mot de passe.
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button onClick={handleCopyCredentials} variant="outline" className="flex-1 gap-2 text-xs">
+                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Copié dans le presse-papier !" : "Copier les identifiants"}
+                </Button>
+                <Button onClick={() => setResetResult(null)} size="sm">
+                  Fermer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       <ConfirmDialog

@@ -64,7 +64,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "owner", "director", "censor", "secretary", "teacher"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "cycles",
@@ -86,7 +86,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "owner", "director", "censor"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "subjects",
@@ -97,7 +97,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "owner", "director", "censor", "teacher"],
     actions: ["view", "create", "edit"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "timetables",
@@ -108,7 +108,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "owner", "director", "censor", "teacher", "parent", "student"],
     actions: ["view", "create", "edit", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "grades",
@@ -119,7 +119,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "director", "censor", "teacher", "parent", "student"],
     actions: ["view", "create", "edit", "export", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "exams",
@@ -130,7 +130,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "director", "censor", "teacher"],
     actions: ["view", "create", "edit", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "report_cards",
@@ -141,7 +141,7 @@ export const MODULES: ModuleConfig[] = [
     group: "academic",
     roles: ["super_admin", "director", "censor", "teacher", "parent", "student"],
     actions: ["view", "create", "edit", "print", "export"],
-    isImplemented: false,
+    isImplemented: true,
     isNew: true,
   },
 
@@ -155,7 +155,7 @@ export const MODULES: ModuleConfig[] = [
     group: "students",
     roles: ["super_admin", "owner", "director", "censor", "secretary", "teacher", "accountant"],
     actions: ["view", "create", "edit", "delete", "export", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "parents",
@@ -166,7 +166,7 @@ export const MODULES: ModuleConfig[] = [
     group: "students",
     roles: ["super_admin", "owner", "director", "censor", "secretary"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "attendance",
@@ -177,7 +177,7 @@ export const MODULES: ModuleConfig[] = [
     group: "students",
     roles: ["super_admin", "director", "censor", "teacher", "secretary", "parent", "student"],
     actions: ["view", "create", "edit", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "discipline",
@@ -188,7 +188,7 @@ export const MODULES: ModuleConfig[] = [
     group: "students",
     roles: ["super_admin", "director", "censor", "teacher"],
     actions: ["view", "create", "edit"],
-    isImplemented: false,
+    isImplemented: true,
   },
 
   // ========== FINANCIAL ==========
@@ -201,7 +201,7 @@ export const MODULES: ModuleConfig[] = [
     group: "financial",
     roles: ["super_admin", "owner", "director", "accountant", "secretary", "parent"],
     actions: ["view", "create", "edit", "approve", "export", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "accounting",
@@ -212,7 +212,7 @@ export const MODULES: ModuleConfig[] = [
     group: "financial",
     roles: ["super_admin", "owner", "accountant"],
     actions: ["view", "create", "edit", "export", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "expenses",
@@ -223,7 +223,7 @@ export const MODULES: ModuleConfig[] = [
     group: "financial",
     roles: ["super_admin", "owner", "director", "accountant"],
     actions: ["view", "create", "edit", "approve", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "revenues",
@@ -234,7 +234,7 @@ export const MODULES: ModuleConfig[] = [
     group: "financial",
     roles: ["super_admin", "owner", "accountant"],
     actions: ["view", "create", "edit", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
 
   // ========== ADMINISTRATION ==========
@@ -247,7 +247,7 @@ export const MODULES: ModuleConfig[] = [
     group: "administration",
     roles: ["super_admin", "owner", "director"],
     actions: ["view", "create", "edit", "delete", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "hr",
@@ -258,7 +258,7 @@ export const MODULES: ModuleConfig[] = [
     group: "administration",
     roles: ["super_admin", "owner", "director"],
     actions: ["view", "create", "edit", "approve"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "rooms",
@@ -269,7 +269,7 @@ export const MODULES: ModuleConfig[] = [
     group: "administration",
     roles: ["super_admin", "owner", "director", "censor"],
     actions: ["view", "create", "edit"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "documents",
@@ -280,7 +280,7 @@ export const MODULES: ModuleConfig[] = [
     group: "administration",
     roles: ["super_admin", "director", "censor", "secretary"],
     actions: ["view", "create", "print", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "diplomas",
@@ -291,7 +291,7 @@ export const MODULES: ModuleConfig[] = [
     group: "administration",
     roles: ["super_admin", "director", "censor", "secretary"],
     actions: ["view", "create", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
 
   // ========== RESOURCES ==========
@@ -304,7 +304,7 @@ export const MODULES: ModuleConfig[] = [
     group: "resources",
     roles: ["super_admin", "director", "librarian", "student"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "inventory",
@@ -315,7 +315,7 @@ export const MODULES: ModuleConfig[] = [
     group: "resources",
     roles: ["super_admin", "owner", "director", "lab_manager"],
     actions: ["view", "create", "edit", "export"],
-    isImplemented: false,
+    isImplemented: true,
   },
 
   // ========== REPORTS & AI ==========
@@ -328,7 +328,7 @@ export const MODULES: ModuleConfig[] = [
     group: "reports",
     roles: ["super_admin", "owner", "director", "censor", "accountant"],
     actions: ["view", "export", "print"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "ai_assistant",
@@ -365,7 +365,7 @@ export const MODULES: ModuleConfig[] = [
     group: "system",
     roles: ["super_admin", "owner", "director"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "owners",
@@ -376,7 +376,7 @@ export const MODULES: ModuleConfig[] = [
     group: "system",
     roles: ["super_admin"],
     actions: ["view", "create", "edit", "delete"],
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     key: "settings",
@@ -387,7 +387,18 @@ export const MODULES: ModuleConfig[] = [
     group: "system",
     roles: ["super_admin", "owner", "director"],
     actions: ["view", "edit"],
-    isImplemented: false,
+    isImplemented: true,
+  },
+  {
+    key: "news",
+    label: "Actualités",
+    description: "Annonces et actualités de l'établissement",
+    icon: "Megaphone",
+    path: "/news",
+    group: "system",
+    roles: ["super_admin", "owner", "director", "censor", "teacher", "parent", "student"],
+    actions: ["view", "create", "edit", "delete"],
+    isImplemented: true,
   },
 ];
 

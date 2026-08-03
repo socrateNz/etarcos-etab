@@ -11,9 +11,10 @@ export async function GET() {
 
   try {
     const supabase = (await createAdminClient()) as any;
-    const estId = (await resolveEstablishmentId(
-      session.user.establishment_id
-    )) || "00000000-0000-0000-0000-000000000000";
+    const estId = await resolveEstablishmentId(session.user.establishment_id);
+    if (!estId) {
+      return NextResponse.json({ error: "Aucun établissement associé à votre compte." }, { status: 400 });
+    }
 
     // 1. Fetch counts from database
     const { count: studentCount } = await supabase

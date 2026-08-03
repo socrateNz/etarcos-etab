@@ -10,15 +10,11 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  Building2,
   Lock,
   Mail,
   ArrowRight,
-  Shield,
-  GraduationCap,
-  School,
   CheckCircle2,
-  Sparkles
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,12 +28,12 @@ export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     mode: "onChange",
@@ -59,8 +55,8 @@ export default function LoginPage() {
         });
       } else {
         toast.success("Connexion réussie !", {
-          description: "Bienvenue sur votre espace établissement.",
-          icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
+          description: "Bienvenue sur votre espace d'établissement.",
+          icon: <CheckCircle2 className="w-5 h-5 text-indigo-500" />,
         });
         router.push("/dashboard");
         router.refresh();
@@ -75,132 +71,82 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative w-full max-w-md flex flex-col items-center px-4">
-      {/* Background Elements */}
-      <div className="absolute -top-24 -right-24 w-96 h-96 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-gradient-to-tr from-blue-500/10 via-indigo-500/5 to-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Decorative Grid Pattern */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='grid' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 60 0 L 0 0 0 60' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23grid)'/%3E%3C/svg%3E')] pointer-events-none" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full relative z-10 bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl shadow-black/60"
-      >
-        {/* Header with Logo */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/30 to-blue-400/30 blur-xl rounded-xl" />
-              <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                <School className="w-6 h-6 text-white" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">
-                Etarcos
-                <span className="text-sm font-normal text-emerald-400 ml-1.5">Etab</span>
-              </h1>
-              <p className="text-[10px] text-muted-foreground/60 tracking-wider uppercase">
-                Gestion Établissement
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-[10px] text-emerald-400 font-medium">Sécurisé</span>
-          </div>
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="w-full flex flex-col justify-between space-y-6"
+    >
+      {/* Brand Logo Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-700 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <Zap className="w-5 h-5 text-white fill-white" />
         </div>
+        <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          Etarcos Etab<span className="text-indigo-600 dark:text-indigo-400 font-bold">.</span>
+        </span>
+      </div>
 
-        {/* Welcome Section - Inspired by NeuroFox */}
-        <div className="mb-8">
-          <motion.h2
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-3xl font-bold text-white font-sans tracking-tight"
-          >
-            Bienvenue
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-muted-foreground/80 mt-2 text-sm leading-relaxed"
-          >
-            Connectez-vous à votre espace établissement pour gérer vos activités éducatives.
-          </motion.p>
-        </div>
+      {/* Title & Description */}
+      <div className="space-y-1">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Welcome Back!
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Connectez-vous pour suivre et gérer vos établissements.
+        </p>
+      </div>
 
-        <motion.form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-5"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          {/* Email Field */}
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-xs font-medium text-slate-300/80">
-              Adresse email
+      {/* Login Form */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Email Field with Floating Border Label */}
+        <div className="space-y-1">
+          <div className="relative">
+            <Label
+              htmlFor="email"
+              className="absolute -top-2.5 left-3 bg-white dark:bg-slate-900 px-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 z-10"
+            >
+              Email
             </Label>
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 group-focus-within:text-emerald-400 transition-colors" />
+            <div className="relative">
               <Input
                 id="email"
                 type="email"
-                placeholder="vous@etablissement.com"
+                placeholder="Votre adresse email"
                 className={cn(
-                  "pl-11 pr-4 py-3 bg-white/5 border-white/10 rounded-xl text-white",
-                  "placeholder:text-muted-foreground/40",
-                  "focus:bg-white/10 focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20",
-                  "transition-all duration-300",
-                  errors.email && "border-destructive/50 focus-visible:ring-destructive/20"
+                  "h-11 pl-4 pr-10 border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm",
+                  "focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-colors",
+                  errors.email && "border-rose-500 focus:border-rose-500 focus:ring-rose-500"
                 )}
                 disabled={isLoading}
                 {...register("email")}
               />
+              <Mail className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
-            {errors.email && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xs text-destructive font-medium"
-              >
-                {errors.email.message}
-              </motion.p>
-            )}
           </div>
+          {errors.email && (
+            <p className="text-xs text-rose-500 font-medium pl-1">{errors.email.message}</p>
+          )}
+        </div>
 
-          {/* Password Field */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="text-xs font-medium text-slate-300/80">
-                Mot de passe
-              </Label>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs text-muted-foreground/60 hover:text-emerald-400 transition-colors"
-                type="button"
-              >
-                Mot de passe oublié ?
-              </Button>
-            </div>
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 group-focus-within:text-emerald-400 transition-colors" />
+        {/* Password Field with Floating Border Label */}
+        <div className="space-y-1">
+          <div className="relative">
+            <Label
+              htmlFor="password"
+              className="absolute -top-2.5 left-3 bg-white dark:bg-slate-900 px-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 z-10"
+            >
+              Password
+            </Label>
+            <div className="relative">
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
+                placeholder="••••••••••••"
                 className={cn(
-                  "pl-11 pr-12 py-3 bg-white/5 border-white/10 rounded-xl text-white",
-                  "placeholder:text-muted-foreground/40",
-                  "focus:bg-white/10 focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20",
-                  "transition-all duration-300",
-                  errors.password && "border-destructive/50 focus-visible:ring-destructive/20"
+                  "h-11 pl-4 pr-10 border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm font-mono",
+                  "focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-colors",
+                  errors.password && "border-rose-500 focus:border-rose-500 focus:ring-rose-500"
                 )}
                 disabled={isLoading}
                 {...register("password")}
@@ -208,118 +154,116 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-white transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            {errors.password && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xs text-destructive font-medium"
-              >
-                {errors.password.message}
-              </motion.p>
-            )}
           </div>
-
-          {/* Remember Me */}
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-2.5 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="peer sr-only"
-                />
-                <div className={cn(
-                  "w-4 h-4 rounded border transition-all duration-300 flex items-center justify-center",
-                  rememberMe
-                    ? "border-emerald-400 bg-emerald-400/20"
-                    : "border-white/20 bg-white/5 group-hover:border-white/40"
-                )}>
-                  {rememberMe && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
-                </div>
-              </div>
-              <span className="text-xs text-muted-foreground/70 group-hover:text-white/90 transition-colors">
-                Se souvenir de moi
-              </span>
-            </label>
-            <Link
-              href="/terms"
-              className="text-xs text-muted-foreground/50 hover:text-emerald-400 transition-colors"
-            >
-              Conditions
-            </Link>
-          </div>
-
-          {/* Submit Button - NeuroFox Inspired */}
-          <motion.div
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="pt-2"
-          >
-            <Button
-              type="submit"
-              className={cn(
-                "w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-500",
-                "hover:shadow-xl hover:shadow-emerald-500/30",
-                "text-white font-semibold py-6 rounded-xl transition-all duration-300",
-                "border border-white/10 group relative overflow-hidden",
-                "disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
-              )}
-              disabled={isLoading || !isValid}
-              size="lg"
-            >
-              {/* Shine Effect */}
-              <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-              {isLoading ? (
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Connexion en cours...</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <span>Se connecter</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  <Sparkles className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              )}
-            </Button>
-          </motion.div>
-        </motion.form>
-
-        {/* Footer with Educational Context */}
-        <div className="mt-8 pt-6 border-t border-white/5">
-          <div className="flex items-center justify-center gap-6">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
-              <GraduationCap className="w-3 h-3 text-emerald-400/70" />
-              <span>Éducation</span>
-            </div>
-            <div className="w-px h-4 bg-white/5" />
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
-              <Shield className="w-3 h-3 text-emerald-400/70" />
-              <span>Données sécurisées</span>
-            </div>
-            <div className="w-px h-4 bg-white/5" />
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
-              <Building2 className="w-3 h-3 text-blue-400/70" />
-              <span>Établissement</span>
-            </div>
-          </div>
-
-          <p className="text-center text-[10px] text-muted-foreground/40 mt-3">
-            Plateforme de gestion éducative — {new Date().getFullYear()}
-          </p>
+          {errors.password && (
+            <p className="text-xs text-rose-500 font-medium pl-1">{errors.password.message}</p>
+          )}
         </div>
-      </motion.div>
-    </div>
+
+        {/* Options Row */}
+        <div className="flex items-center justify-between pt-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              Remember me
+            </span>
+          </label>
+          <Link
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              toast.info("Mot de passe oublié", {
+                description: "Veuillez contacter l'administrateur de votre établissement pour réinitialiser vos accès.",
+              });
+            }}
+            className="text-xs font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors"
+          >
+            Forgot Password?
+          </Link>
+        </div>
+
+        {/* Primary Submit Button */}
+        <Button
+          type="submit"
+          className={cn(
+            "w-full h-11 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-lg shadow-md shadow-indigo-600/25 transition-all duration-200 text-sm mt-2",
+            "disabled:opacity-70 disabled:cursor-not-allowed"
+          )}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Connexion en cours...</span>
+            </div>
+          ) : (
+            <span>Login</span>
+          )}
+        </Button>
+
+        {/* Divider */}
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+          </div>
+          <div className="relative flex justify-center text-[11px] uppercase">
+            <span className="bg-white dark:bg-slate-900 px-2 text-slate-400 font-medium">
+              or
+            </span>
+          </div>
+        </div>
+
+        {/* Google Sign-In Button */}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            toast.info("Connexion Google SSO", {
+              description: "La connexion Google SSO sera bientôt activée pour les comptes professionnels.",
+            });
+          }}
+          className="w-full h-11 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium text-xs rounded-lg flex items-center justify-center gap-2 transition-colors"
+        >
+          {/* Google Icon SVG */}
+          <svg className="w-4 h-4" viewBox="0 0 24 24">
+            <path
+              fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+            />
+            <path
+              fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+            />
+            <path
+              fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+            />
+          </svg>
+          <span>Sign in with Google</span>
+        </Button>
+      </form>
+
+      {/* Footer Copyright and Privacy Link */}
+      <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-4 border-t border-slate-100 dark:border-slate-800/60">
+        <Link href="/privacy" className="hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+          Privacy Policy
+        </Link>
+        <span>Copyright {new Date().getFullYear()}</span>
+      </div>
+    </motion.div>
   );
 }

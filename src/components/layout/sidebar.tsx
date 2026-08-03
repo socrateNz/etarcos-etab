@@ -13,8 +13,9 @@ import {
   FolderOpen, Award, Library, Package, BarChart3, Sparkles,
   Building, UsersRound, Crown, Settings, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Zap, Bell, HelpCircle, Megaphone,
-  FileCode, LogOut, GitBranch, Route
+  FileCode, LogOut, GitBranch, Route, Sun, Moon
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useSidebarStore } from "@/store/sidebar-store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { cn } from "@/lib/utils";
@@ -71,7 +72,7 @@ const SUPER_ADMIN_NAV = [
   {
     group: "MAINTENANCE",
     items: [
-      { key: "sa-ai", label: "IA Gemini", path: "/ai-assistant", icon: Sparkles },
+      { key: "sa-ai", label: "Etarcos IA", path: "/ai-assistant", icon: Sparkles },
       { key: "sa-notif", label: "Notifications", path: "/notifications", icon: Bell },
       { key: "sa-supp", label: "Support Tickets", path: "/support", icon: HelpCircle },
       { key: "sa-news", label: "Actualités", path: "/news", icon: Megaphone },
@@ -222,11 +223,69 @@ const OWNER_NAV = [
   }
 ];
 
+const DIRECTOR_NAV = [
+  {
+    group: "VUE D'ENSEMBLE",
+    items: [
+      { key: "dir-dash", label: "Tableau de bord", path: "/dashboard", icon: LayoutDashboard },
+    ]
+  },
+  {
+    group: "MON ÉTABLISSEMENT",
+    items: [
+      { key: "dir-staff", label: "Personnel & RH", path: "/staff", icon: Users },
+      { key: "dir-rooms", label: "Infrastructures & Salles", path: "/rooms", icon: Building2 },
+    ]
+  },
+  {
+    group: "ÉLÈVES & PARENTS",
+    items: [
+      { key: "dir-stud", label: "Élèves", path: "/students", icon: GraduationCap },
+      { key: "dir-parents", label: "Parents", path: "/parents", icon: Users },
+      { key: "dir-att", label: "Présences & Retards", path: "/attendance", icon: CalendarCheck },
+      { key: "dir-disc", label: "Discipline", path: "/discipline", icon: ShieldAlert },
+    ]
+  },
+  {
+    group: "ACADÉMIQUE",
+    items: [
+      { key: "dir-cls", label: "Classes", path: "/classes", icon: School },
+      { key: "dir-cycles", label: "Cycles & Niveaux", path: "/cycles", icon: GitBranch },
+      { key: "dir-tracks", label: "Filières / Séries", path: "/tracks", icon: Route },
+      { key: "dir-sub", label: "Matières", path: "/subjects", icon: BookOpen },
+      { key: "dir-time", label: "Emplois du temps", path: "/timetables", icon: CalendarDays },
+      { key: "dir-grades", label: "Notes & Examens", path: "/grades", icon: ClipboardList },
+      { key: "dir-cards", label: "Bulletins scolaires", path: "/report-cards", icon: FileText },
+      { key: "dir-docs", label: "Documents & Diplômes", path: "/documents", icon: FolderOpen },
+    ]
+  },
+  {
+    group: "FINANCES (SUIVI)",
+    items: [
+      { key: "dir-pay", label: "Paiements", path: "/payments", icon: CreditCard },
+      { key: "dir-exp", label: "Dépenses", path: "/expenses", icon: TrendingDown },
+    ]
+  },
+  {
+    group: "RESSOURCES & RAPPORTS",
+    items: [
+      { key: "dir-inv", label: "Inventaire", path: "/inventory", icon: Package },
+      { key: "dir-lib", label: "Bibliothèque", path: "/library", icon: Library },
+      { key: "dir-rep", label: "Rapports & Bilans", path: "/reports", icon: BarChart3 },
+      { key: "dir-ai", label: "Assistant IA", path: "/ai-assistant", icon: Sparkles },
+      { key: "dir-sett", label: "Paramètres", path: "/settings", icon: Settings },
+    ]
+  }
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isSuperAdmin = session?.user?.role === "super_admin";
   const isOwner = session?.user?.role === "owner";
+  const isDirector = session?.user?.role === "director";
+
+  const currentNav = isSuperAdmin ? SUPER_ADMIN_NAV : isOwner ? OWNER_NAV : isDirector ? DIRECTOR_NAV : null;
 
   const [openSubMenus, setOpenSubMenus] = useState<string[]>([]);
 
@@ -252,6 +311,12 @@ export function Sidebar() {
 
   const { isCollapsed, toggleCollapsed, expandedGroups, toggleGroup } = useSidebarStore();
   const { canAccessModule } = usePermissions();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Filter accessible modules for standard view
   const accessibleModules = MODULES.filter((m) => canAccessModule(m.key));
@@ -288,7 +353,7 @@ export function Sidebar() {
               animate={isCollapsed ? "collapsed" : "expanded"}
               className="overflow-hidden"
             >
-              <p className="text-sm font-bold text-white leading-none">Etarcos</p>
+              <p className="text-sm font-bold text-sidebar-foreground leading-none">Etarcos</p>
               <p className="text-[10px] text-sidebar-foreground/50 mt-0.5">Etab Platform</p>
             </motion.div>
           </Link>
@@ -296,76 +361,21 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 no-scrollbar">
-          {isSuperAdmin ? (
-            /* Render Super Admin Menu */
-            SUPER_ADMIN_NAV.map((group) => (
+          {currentNav ? (
+            /* Render Structured Role Menu (Super Admin, Owner, Director) */
+            currentNav.map((group) => (
               <div key={group.group} className="mb-4">
                 {!isCollapsed && (
-                  <div className="px-4 py-1.5 mb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                  <div className="px-4 py-1.5 mb-1 text-[10px] font-bold uppercase tracking-wider text-sidebar-foreground/70">
                     {group.group}
                   </div>
                 )}
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.path;
-
-                  const itemContent = (
-                    <Link
-                      href={item.path}
-                      className={cn(
-                        "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg transition-all duration-150 group relative",
-                        isActive
-                          ? "bg-primary text-primary-foreground shadow-brand-sm"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      )}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="sidebar-active-sa"
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-white rounded-r-full"
-                        />
-                      )}
-                      <Icon className="w-4 h-4 flex-shrink-0" />
-                      <motion.span
-                        variants={textVariants}
-                        animate={isCollapsed ? "collapsed" : "expanded"}
-                        className="text-sm font-medium truncate"
-                      >
-                        {item.label}
-                      </motion.span>
-                    </Link>
-                  );
-
-                  if (isCollapsed) {
-                    return (
-                      <Tooltip key={item.key}>
-                        <TooltipTrigger render={itemContent} />
-                        <TooltipContent side="right" className="font-medium">
-                          {item.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return <div key={item.key}>{itemContent}</div>;
-                })}
-              </div>
-            ))
-          ) : isOwner ? (
-            /* Render Owner Menu */
-            OWNER_NAV.map((group) => (
-              <div key={group.group} className="mb-4">
-                {!isCollapsed && (
-                  <div className="px-4 py-1.5 mb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                    {group.group}
-                  </div>
-                )}
-                {group.items.map((item) => {
+                {group.items.map((item: any) => {
                   const Icon = item.icon;
                   const hasSubItems = !!item.subItems;
                   const isSubOpen = openSubMenus.includes(item.key);
-                  const isParentActive = item.subItems 
-                    ? item.subItems.some(sub => pathname === sub.path || pathname.startsWith(sub.path + "?") || pathname.startsWith(sub.path + "/"))
+                  const isParentActive = item.subItems
+                    ? item.subItems.some((sub: any) => pathname === sub.path || pathname.startsWith(sub.path + "?") || pathname.startsWith(sub.path + "/"))
                     : pathname === item.path;
 
                   const itemContent = hasSubItems ? (
@@ -429,7 +439,7 @@ export function Sidebar() {
                       {/* Submenu Items */}
                       {!isCollapsed && hasSubItems && isSubOpen && (
                         <div className="flex flex-col pl-9 pr-2 py-0.5 gap-0.5 border-l border-sidebar-border/30 ml-4 animate-in slide-in-from-top-1 duration-150">
-                          {item.subItems!.map((sub) => {
+                          {item.subItems!.map((sub: any) => {
                             const isSubActive = pathname === sub.path || pathname.startsWith(sub.path + "?");
                             return (
                               <Link
@@ -463,13 +473,13 @@ export function Sidebar() {
                     onClick={() => toggleGroup(groupKey)}
                     className="w-full flex items-center justify-between px-3 py-1.5 mb-1"
                   >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-400">
                       {label}
                     </span>
                     {expandedGroups.includes(groupKey) ? (
-                      <ChevronDown className="w-3 h-3 text-sidebar-foreground/40" />
+                      <ChevronDown className="w-3 h-3 text-slate-600 dark:text-slate-400" />
                     ) : (
-                      <ChevronRight className="w-3 h-3 text-sidebar-foreground/40" />
+                      <ChevronRight className="w-3 h-3 text-slate-600 dark:text-slate-400" />
                     )}
                   </button>
                 )}
@@ -495,8 +505,8 @@ export function Sidebar() {
                             className={cn(
                               "flex items-center gap-3 mx-2 px-2 py-2 rounded-lg transition-all duration-150 group relative",
                               isActive
-                                ? "bg-primary text-primary-foreground shadow-brand-sm"
-                                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                                ? "bg-primary text-white font-bold shadow-brand-sm"
+                                : "text-slate-700 dark:text-slate-300 font-medium hover:bg-sidebar-accent hover:text-slate-900 dark:hover:text-white",
                               !module.isImplemented && "opacity-75"
                             )}
                           >
@@ -511,7 +521,7 @@ export function Sidebar() {
                             <Icon
                               className={cn(
                                 "w-4 h-4 flex-shrink-0",
-                                isActive ? "text-white" : ""
+                                isActive ? "text-white" : "text-slate-600 dark:text-slate-400"
                               )}
                             />
 
@@ -566,14 +576,43 @@ export function Sidebar() {
           )}
         </nav>
 
-        {/* Collapse toggle button */}
-        <div className="p-3 border-t border-sidebar-border">
+        {/* Footer actions: Theme Toggle & Collapse button */}
+        <div className="p-3 border-t border-sidebar-border space-y-1">
+          {/* Theme Toggle Button */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all cursor-pointer"
+                />
+              }
+            >
+              {mounted && theme === "dark" ? (
+                <Sun className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+              )}
+              <motion.span
+                variants={textVariants}
+                animate={isCollapsed ? "collapsed" : "expanded"}
+                className="text-xs font-semibold overflow-hidden whitespace-nowrap"
+              >
+                {mounted && theme === "dark" ? "Mode Clair" : "Mode Sombre"}
+              </motion.span>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {mounted && theme === "dark" ? "Basculer en Mode Clair" : "Basculer en Mode Sombre"}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Collapse toggle button */}
           <Tooltip>
             <TooltipTrigger
               render={
                 <button
                   onClick={toggleCollapsed}
-                  className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
+                  className="flex items-center gap-3 w-full px-2 py-2 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all cursor-pointer"
                 />
               }
             >
@@ -585,13 +624,13 @@ export function Sidebar() {
               <motion.span
                 variants={textVariants}
                 animate={isCollapsed ? "collapsed" : "expanded"}
-                className="text-sm overflow-hidden"
+                className="text-xs font-semibold overflow-hidden whitespace-nowrap"
               >
                 Réduire
               </motion.span>
             </TooltipTrigger>
             <TooltipContent side="right">
-              {isCollapsed ? "Étendre" : "Réduire"}
+              {isCollapsed ? "Étendre la barre" : "Réduire la barre"}
             </TooltipContent>
           </Tooltip>
         </div>

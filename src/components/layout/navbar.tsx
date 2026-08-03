@@ -15,6 +15,7 @@ import { useSidebarStore } from "@/store/sidebar-store";
 import { useBreakpoint } from "@/hooks/use-media-query";
 import { useQuery } from "@tanstack/react-query";
 import { listEstablishments } from "@/features/establishments/actions";
+import { listNotificationsAction } from "@/app/actions/superadmin";
 import { useOwnerStore } from "@/store/owner-store";
 import { cn, getInitials, formatRelativeDate } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,13 +33,6 @@ import { Input } from "@/components/ui/input";
 import { SYSTEM_ROLES } from "@/types/auth";
 import Link from "next/link";
 
-// Mock notifications for demo
-const MOCK_NOTIFICATIONS = [
-  { id: "1", title: "Nouveau paiement", message: "Paul Martin a payé 75 000 FCFA", time: "2026-06-30T09:00:00Z", type: "success" as const, isRead: false },
-  { id: "2", title: "Bulletin publié", message: "Les bulletins du T2 sont disponibles", time: "2026-06-30T08:30:00Z", type: "info" as const, isRead: false },
-  { id: "3", title: "Absence signalée", message: "3 élèves absents en classe de 3ème A", time: "2026-06-30T07:45:00Z", type: "warning" as const, isRead: true },
-];
-
 export function Navbar() {
   const router = useRouter();
   const { user } = useAuth();
@@ -53,7 +47,26 @@ export function Navbar() {
     setMounted(true);
   }, []);
 
-  const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
+  const { data: realNotifs = [] } = useQuery({
+    queryKey: ["navbar-notifications"],
+    queryFn: async () => {
+      const res = await listNotificationsAction();
+      if (res.error) return [];
+      return res.data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const notificationsList = realNotifs.map((n: any) => ({
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    time: n.created_at,
+    type: n.type === "warning" ? ("warning" as const) : n.type === "success" ? ("success" as const) : ("info" as const),
+    isRead: n.is_read,
+  }));
+
+  const unreadCount = notificationsList.filter((n: { isRead: boolean }) => !n.isRead).length;
   const roleMeta = user?.role ? SYSTEM_ROLES[user.role] : null;
 
   const { mode, selectedEstablishmentId, compareIds, setMode, setSelectedEstablishmentId, toggleCompareId } = useOwnerStore();
@@ -314,33 +327,53 @@ export function Navbar() {
                 </div>
 
                 <div className="max-h-72 overflow-y-auto">
-                  {MOCK_NOTIFICATIONS.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={cn(
-                        "flex items-start gap-3 p-3 hover:bg-muted/50 transition-colors cursor-pointer",
-                        !notif.isRead && "bg-primary/5"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-2 h-2 rounded-full mt-1.5 flex-shrink-0",
-                        notif.type === "success" && "bg-emerald-500",
-                        notif.type === "info" && "bg-blue-500",
-                        notif.type === "warning" && "bg-amber-500",
-                      )} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{notif.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{notif.message}</p>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          {formatRelativeDate(notif.time)}
-                        </p>
-                      </div>
+                  {notificationsList.length === 0 ? (
+                    <div className="p-6 text-center space-y-1.5">
+                      <Bell className="w-6 h-6 text-muted-foreground/40 mx-auto stroke-1" />
+                      <p className="text-xs font-semibold text-foreground">Aucune notification</p>
+                      <p className="text-[11px] text-muted-foreground">Vous êtes à jour ! Aucune alerte en attente.</p>
                     </div>
-                  ))}
+                  ) : (
+                    notificationsList.map((notif: any) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => {
+                          setNotificationsOpen(false);
+                          router.push("/notifications");
+                        }}
+                        className={cn(
+                          "flex items-start gap-3 p-3 hover:bg-muted/50 transition-colors cursor-pointer border-b border-border/40 last:border-0",
+                          !notif.isRead && "bg-primary/5 font-semibold"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-2 h-2 rounded-full mt-1.5 flex-shrink-0",
+                          notif.type === "success" && "bg-emerald-500",
+                          notif.type === "info" && "bg-blue-500",
+                          notif.type === "warning" && "bg-amber-500",
+                        )} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-foreground truncate">{notif.title}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{notif.message}</p>
+                          <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                            {formatRelativeDate(notif.time)}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
-                <div className="p-3 border-t border-border">
-                  <Button variant="ghost" size="sm" className="w-full text-primary text-xs">
+                <div className="p-2 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-primary text-xs font-semibold hover:bg-primary/10"
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      router.push("/notifications");
+                    }}
+                  >
                     Voir toutes les notifications
                   </Button>
                 </div>
@@ -393,12 +426,12 @@ export function Navbar() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem render={<Link href="/profile" className="flex items-center gap-2" />}>
+            <DropdownMenuItem onClick={() => router.push("/profile")} className="flex items-center gap-2 cursor-pointer">
               <User className="w-4 h-4" />
               Mon profil
             </DropdownMenuItem>
 
-            <DropdownMenuItem render={<Link href="/settings" className="flex items-center gap-2" />}>
+            <DropdownMenuItem onClick={() => router.push("/settings")} className="flex items-center gap-2 cursor-pointer">
               <Settings className="w-4 h-4" />
               Paramètres
             </DropdownMenuItem>

@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -186,6 +186,13 @@ export async function updateTrackAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "tracks", id, authResult.session!.user.establishment_id,
+      "Filière introuvable.", "Vous n'avez pas accès à cette filière."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     if (payload.code) payload.code = payload.code.toUpperCase();
     delete payload.establishment_id;
@@ -232,6 +239,22 @@ export async function deleteTrackAction(id: string): Promise<ActionResult<void>>
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("tracks")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Filière introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à cette filière." };
+    }
+
     const { error } = await db.from("tracks").delete().eq("id", id);
     if (error) return { error: error.message };
 
@@ -239,5 +262,45 @@ export async function deleteTrackAction(id: string): Promise<ActionResult<void>>
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression." };
+  }
+}
+
+export async function createTracksBatchAction(
+  items: { name: string; code: string; description?: string }[]
+): Promise<ActionResult<Track[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins une filière." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    const payload = items.map((item) => ({
+      establishment_id: estId,
+      name: item.name.trim(),
+      code: item.code.trim().toUpperCase(),
+      description: item.description || null,
+    }));
+
+    const { data, error } = await db
+      .from("tracks")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/tracks");
+    return { success: true, data: data as Track[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des filières." };
   }
 }

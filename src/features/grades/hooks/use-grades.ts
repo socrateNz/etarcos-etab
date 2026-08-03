@@ -36,16 +36,29 @@ export function useSaveGrades() {
       const result = await saveGradesAction(values);
       if (result.error) throw new Error(result.error);
     },
-    onSuccess: (_, variables) => {
-      qc.invalidateQueries({
-        queryKey: gradesKeys.grid(
-          variables.classroom_id,
-          variables.subject_id,
-          variables.period,
-          variables.type
-        ),
-      });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: gradesKeys.all });
+      qc.invalidateQueries({ queryKey: ["classroom-averages"] });
+      qc.invalidateQueries({ queryKey: ["student-report-matrix"] });
       toast.success("Notes enregistrées avec succès !");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useDeleteGrade() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (gradeId: string) => {
+      const { deleteGradeAction } = await import("../actions");
+      const result = await deleteGradeAction(gradeId);
+      if (result.error) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: gradesKeys.all });
+      qc.invalidateQueries({ queryKey: ["classroom-averages"] });
+      qc.invalidateQueries({ queryKey: ["student-report-matrix"] });
+      toast.success("Note supprimée avec succès !");
     },
     onError: (e: Error) => toast.error(e.message),
   });

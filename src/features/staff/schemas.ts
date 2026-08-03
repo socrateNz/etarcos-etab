@@ -21,6 +21,7 @@ export const createStaffSchema = z.object({
   contract_type: z.enum(["permanent", "temporary", "part_time", "intern"]).default("permanent"),
   status: z.enum(["active", "inactive", "suspended", "pending"]).default("active"),
   establishment_id: z.string().uuid().optional(),
+  password: z.string().optional().nullable(),
 });
 
 export const updateStaffSchema = createStaffSchema.partial();

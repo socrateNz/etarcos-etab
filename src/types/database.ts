@@ -93,6 +93,7 @@ export interface User {
   address: string | null;
   is_active: boolean;
   email_verified: boolean;
+  requires_password_change?: boolean;
   last_login: string | null;
   establishment_id: string | null;
   created_at: string;
@@ -474,6 +475,46 @@ export interface NewsPost {
   updated_at: string;
   // Relations
   author?: { id: string; name: string } | null;
+}
+
+export type DocumentCategory = "report_card" | "receipt" | "contract" | "id_card" | "other";
+
+export interface SchoolDocument {
+  id: string;
+  establishment_id: string;
+  title: string;
+  description: string | null;
+  file_url: string;
+  file_type: string | null;
+  file_size: number | null;
+  category: DocumentCategory | null;
+  owner_id: string | null;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  owner?: { id: string; name: string } | null;
+}
+
+export interface Diploma {
+  id: string;
+  establishment_id: string;
+  student_id: string;
+  academic_year_id: string;
+  name: string;
+  serial_number: string;
+  issue_date: string;
+  hash_signature: string | null;
+  pdf_url: string | null;
+  created_at: string;
+  // Relations
+  student?: {
+    id: string;
+    student_number: string;
+    user?: { id: string; name: string } | null;
+    classroom?: { id: string; name: string } | null;
+  } | null;
+  academic_year?: { id: string; name: string } | null;
 }
 
 // ============================================

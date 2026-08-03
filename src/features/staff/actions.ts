@@ -3,6 +3,8 @@
 import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
+import { generateTemporaryPassword } from "@/lib/auth/password";
+import { sendWelcomeEmail } from "@/lib/email";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
 import { revalidatePath } from "next/cache";
@@ -45,6 +47,8 @@ async function getDb() {
 
 // ========== STAFF MEMBERS ==========
 
+import { listOwnerEstablishmentsAction } from "@/features/users/actions";
+
 export async function listStaff(
   input: Partial<ListStaffInput> = {}
 ): Promise<ActionResult<PaginatedResult<StaffMemberWithUser>>> {
@@ -66,7 +70,22 @@ export async function listStaff(
       .from("staff_members")
       .select("*, user:users(*)", { count: "exact" });
 
-    if (estId) query = query.eq("establishment_id", estId);
+    if (authResult.session!.user.role === "owner") {
+      const etabRes = await listOwnerEstablishmentsAction();
+      const etabIds = (etabRes.data ?? []).map((e: any) => e.id);
+      if (etabIds.length > 0) {
+        if (estId) {
+          query = query.eq("establishment_id", estId);
+        } else {
+          query = query.in("establishment_id", etabIds);
+        }
+      } else {
+        return { success: true, data: { data: [], total: 0, page: 1, per_page: 50, total_pages: 0 } };
+      }
+    } else if (estId) {
+      query = query.eq("establishment_id", estId);
+    }
+
     if (position) query = query.eq("position", position);
     if (department) query = query.eq("department", department);
 
@@ -85,14 +104,7 @@ export async function listStaff(
     const { data, error, count } = await query.range(from, from + per_page - 1);
     if (error) return { error: error.message };
 
-    // Post-filter search on user name if search is provided
-    let list = (data ?? []) as StaffMemberWithUser[];
-    if (search && search.trim() !== "") {
-      const searchLower = search.toLowerCase();
-      // If we need to search user name too
-      // The select query doesn't filter nested user name, so we can fetch all or do nested search
-      // Let's also verify if nested user exists
-    }
+    const list = (data ?? []) as StaffMemberWithUser[];
 
     const total = count ?? 0;
     return {
@@ -132,6 +144,32 @@ export async function createStaffAction(
   try {
     const db = await getDb();
 
+    // Determine target role from position
+    let roleName = "teacher";
+    const pos = validated.data.position.toLowerCase();
+    if (pos.includes("direct") || pos.includes("dir")) roleName = "director";
+    else if (pos.includes("cens") || pos.includes("survei")) roleName = "censor";
+    else if (pos.includes("compt") || pos.includes("financ") || pos.includes("account")) roleName = "accountant";
+    else if (pos.includes("secr")) roleName = "secretary";
+    else if (pos.includes("biblio") || pos.includes("lib")) roleName = "librarian";
+    else if (pos.includes("lab")) roleName = "lab_manager";
+
+    // SINGLE DIRECTOR PER ESTABLISHMENT RULE CHECK
+    if (roleName === "director") {
+      const { data: existingDirectorRoles } = await db
+        .from("user_roles")
+        .select("user_id, role:roles!inner(slug, name), user:users!inner(establishment_id, is_active)")
+        .or("role.slug.eq.director,role.name.eq.director")
+        .eq("user.establishment_id", estId)
+        .eq("user.is_active", true);
+
+      if (existingDirectorRoles && existingDirectorRoles.length > 0) {
+        return {
+          error: "Cet établissement possède déjà un Directeur d'Établissement. Un seul directeur est autorisé par établissement.",
+        };
+      }
+    }
+
     // Check unique employee number
     const { data: existingEmp } = await db
       .from("staff_members")
@@ -152,7 +190,10 @@ export async function createStaffAction(
     if (existingUser) return { error: "Cet email est déjà utilisé." };
 
     // 1. Create user in Supabase Auth via Admin API
-    const password = Math.random().toString(36).slice(-8); // Random default password
+    const password = (validated.data.password && validated.data.password.trim().length >= 6)
+      ? validated.data.password.trim()
+      : generateTemporaryPassword();
+
     const { data: authUser, error: authError } = await db.auth.admin.createUser({
       email: validated.data.email.toLowerCase(),
       email_confirm: true,
@@ -177,28 +218,33 @@ export async function createStaffAction(
       address: validated.data.address || null,
       establishment_id: estId,
       is_active: validated.data.status === "active",
+      requires_password_change: true,
     });
 
     if (userError) {
-      // Attempt clean up of auth user
       await db.auth.admin.deleteUser(authUser.user.id);
       return { error: userError.message };
     }
 
-    // 3. Assign Role based on position
-    let roleName = "teacher";
-    const pos = validated.data.position.toLowerCase();
-    if (pos.includes("direct") || pos.includes("dir")) roleName = "director";
-    else if (pos.includes("cens") || pos.includes("survei")) roleName = "censor";
-    else if (pos.includes("compt") || pos.includes("financ") || pos.includes("account")) roleName = "accountant";
-    else if (pos.includes("secr")) roleName = "secretary";
-    else if (pos.includes("biblio") || pos.includes("lib")) roleName = "librarian";
-
-    const { data: role } = await db
+    // 3. Assign Role in DB (Ensure role exists in roles table)
+    let { data: role } = await db
       .from("roles")
       .select("id")
-      .eq("name", roleName)
+      .or(`slug.eq.${roleName},name.eq.${roleName}`)
       .maybeSingle();
+
+    if (!role) {
+      const { data: newRole } = await db
+        .from("roles")
+        .insert({
+          name: roleName === "director" ? "Directeur d'Établissement" : roleName.charAt(0).toUpperCase() + roleName.slice(1),
+          slug: roleName,
+          is_system: true,
+        })
+        .select("id")
+        .single();
+      role = newRole;
+    }
 
     if (role) {
       await db.from("user_roles").insert({
@@ -232,8 +278,10 @@ export async function createStaffAction(
       return { error: staffError.message };
     }
 
+    await sendWelcomeEmail({ email: validated.data.email.toLowerCase(), name: validated.data.name, tempPassword: password });
+
     revalidatePath("/hr");
-    return { success: true, data: staff as StaffMember };
+    return { success: true, data: { ...staff, tempPassword: password } as any };
   } catch {
     return { error: "Erreur lors de la création du membre du personnel." };
   }
@@ -260,6 +308,14 @@ export async function updateStaffAction(
       .maybeSingle();
 
     if (!currentStaff) return { error: "Membre du personnel introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      currentStaff.establishment_id
+    );
+    if (estId !== currentStaff.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce membre du personnel." };
+    }
 
     // Check unique employee number if changed
     if (validated.data.employee_number && validated.data.employee_number !== currentStaff.employee_number) {
@@ -346,11 +402,19 @@ export async function deleteStaffAction(id: string): Promise<ActionResult<void>>
     const db = await getDb();
     const { data: staff } = await db
       .from("staff_members")
-      .select("user_id")
+      .select("user_id, establishment_id")
       .eq("id", id)
       .maybeSingle();
 
     if (!staff) return { error: "Membre du personnel introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      staff.establishment_id
+    );
+    if (estId !== staff.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce membre du personnel." };
+    }
 
     // Deleting the auth user automatically deletes the users profile row and cascades to staff_members table
     const { error } = await db.auth.admin.deleteUser(staff.user_id);

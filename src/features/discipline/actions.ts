@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -174,6 +174,13 @@ export async function updateDisciplineRecordAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "discipline_records", id, authResult.session!.user.establishment_id,
+      "Dossier disciplinaire introuvable.", "Vous n'avez pas accès à ce dossier disciplinaire."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     delete payload.establishment_id;
 
@@ -207,6 +214,13 @@ export async function deleteDisciplineRecordAction(id: string): Promise<ActionRe
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "discipline_records", id, authResult.session!.user.establishment_id,
+      "Dossier disciplinaire introuvable.", "Vous n'avez pas accès à ce dossier disciplinaire."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("discipline_records").delete().eq("id", id);
     if (error) return { error: error.message };
 

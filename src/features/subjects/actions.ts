@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -193,6 +193,13 @@ export async function updateSubjectAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "subjects", id, authResult.session!.user.establishment_id,
+      "Matière introuvable.", "Vous n'avez pas accès à cette matière."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     if (payload.code) payload.code = payload.code.toUpperCase();
     delete payload.establishment_id;
@@ -239,6 +246,22 @@ export async function deleteSubjectAction(id: string): Promise<ActionResult<void
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("subjects")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Matière introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à cette matière." };
+    }
+
     const { error } = await db.from("subjects").delete().eq("id", id);
     if (error) return { error: error.message };
 
@@ -246,5 +269,49 @@ export async function deleteSubjectAction(id: string): Promise<ActionResult<void
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression." };
+  }
+}
+
+export async function createSubjectsBatchAction(
+  trackId: string | null,
+  items: { name: string; code: string; coefficient: number; color?: string; description?: string }[]
+): Promise<ActionResult<Subject[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins une matière." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    const payload = items.map((item) => ({
+      establishment_id: estId,
+      track_id: trackId || null,
+      name: item.name.trim(),
+      code: item.code.trim().toUpperCase(),
+      coefficient: item.coefficient ?? 1,
+      color: item.color || null,
+      description: item.description || null,
+    }));
+
+    const { data, error } = await db
+      .from("subjects")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/subjects");
+    return { success: true, data: data as Subject[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des matières." };
   }
 }

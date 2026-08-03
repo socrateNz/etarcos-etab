@@ -4,6 +4,8 @@ import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
+import { generateTemporaryPassword } from "@/lib/auth/password";
+import { sendWelcomeEmail } from "@/lib/email";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
 import { revalidatePath } from "next/cache";
@@ -152,7 +154,7 @@ export async function createParentAction(
     if (existingUser) return { error: "Cet email est déjà utilisé." };
 
     // 1. Create auth user in Supabase Auth via Admin API
-    const password = Math.random().toString(36).slice(-8); // Random default password
+    const password = generateTemporaryPassword();
     const { data: authUser, error: authError } = await db.auth.admin.createUser({
       email: validated.data.email.toLowerCase(),
       email_confirm: true,
@@ -228,6 +230,8 @@ export async function createParentAction(
       );
     }
 
+    await sendWelcomeEmail({ email: validated.data.email.toLowerCase(), name: validated.data.name, tempPassword: password });
+
     revalidatePath("/parents");
     return { success: true, data: parent as Parent };
   } catch {
@@ -251,11 +255,19 @@ export async function updateParentAction(
     const db = await getDb();
     const { data: currentParent } = await db
       .from("parents")
-      .select("user_id")
+      .select("user_id, establishment_id")
       .eq("id", id)
       .maybeSingle();
 
     if (!currentParent) return { error: "Parent introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      currentParent.establishment_id
+    );
+    if (estId !== currentParent.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce parent." };
+    }
 
     // 1. Update User profile fields
     const userPayload: any = {};
@@ -338,11 +350,19 @@ export async function deleteParentAction(id: string): Promise<ActionResult<void>
     const db = await getDb();
     const { data: parent } = await db
       .from("parents")
-      .select("user_id")
+      .select("user_id, establishment_id")
       .eq("id", id)
       .maybeSingle();
 
     if (!parent) return { error: "Parent introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      parent.establishment_id
+    );
+    if (estId !== parent.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce parent." };
+    }
 
     const { error } = await db.auth.admin.deleteUser(parent.user_id);
     if (error) {

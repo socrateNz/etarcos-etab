@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -221,6 +221,14 @@ export async function updateLessonAction(
 
     if (!currentLesson) return { error: "Cours introuvable." };
 
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      currentLesson.establishment_id
+    );
+    if (estId !== currentLesson.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce cours." };
+    }
+
     const payload = { ...validated.data };
     delete payload.establishment_id;
     delete payload.academic_year_id;
@@ -282,6 +290,13 @@ export async function deleteLessonAction(id: string): Promise<ActionResult<void>
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "lessons", id, authResult.session!.user.establishment_id,
+      "Cours introuvable.", "Vous n'avez pas accès à ce cours."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("lessons").delete().eq("id", id);
     if (error) return { error: error.message };
 
@@ -289,5 +304,69 @@ export async function deleteLessonAction(id: string): Promise<ActionResult<void>
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression du cours." };
+  }
+}
+
+export async function createLessonsBatchAction(
+  classroomId: string,
+  items: {
+    subject_id: string;
+    teacher_id: string;
+    day_of_week: number;
+    start_time: string;
+    end_time: string;
+    room_id?: string | null;
+  }[]
+): Promise<ActionResult<Lesson[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins un cours." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    const { data: currentYear } = await db
+      .from("academic_years")
+      .select("id")
+      .eq("establishment_id", estId)
+      .eq("is_current", true)
+      .maybeSingle();
+
+    if (!currentYear) {
+      return { error: "Aucune année académique active n'est configurée." };
+    }
+
+    const payload = items.map((item) => ({
+      establishment_id: estId,
+      classroom_id: classroomId,
+      academic_year_id: currentYear.id,
+      subject_id: item.subject_id,
+      teacher_id: item.teacher_id,
+      day_of_week: item.day_of_week,
+      start_time: item.start_time.substring(0, 5),
+      end_time: item.end_time.substring(0, 5),
+      room_id: item.room_id || null,
+    }));
+
+    const { data, error } = await db
+      .from("lessons")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/timetables");
+    return { success: true, data: data as Lesson[] };
+  } catch {
+    return { error: "Erreur lors de la programmation groupée des cours." };
   }
 }

@@ -4,6 +4,8 @@ import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
+import { generateTemporaryPassword } from "@/lib/auth/password";
+import { sendWelcomeEmail } from "@/lib/email";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
 import { revalidatePath } from "next/cache";
@@ -163,7 +165,7 @@ export async function createStudentAction(
     }
 
     // 1. Create auth user in Supabase Auth via Admin API
-    const password = Math.random().toString(36).slice(-8); // Random password
+    const password = generateTemporaryPassword();
     const { data: authUser, error: authError } = await db.auth.admin.createUser({
       email: email.toLowerCase(),
       email_confirm: true,
@@ -233,6 +235,8 @@ export async function createStudentAction(
       return { error: studentError.message };
     }
 
+    await sendWelcomeEmail({ email: email.toLowerCase(), name: validated.data.name, tempPassword: password });
+
     revalidatePath("/students");
     return { success: true, data: student as Student };
   } catch {
@@ -261,6 +265,14 @@ export async function updateStudentAction(
       .maybeSingle();
 
     if (!currentStudent) return { error: "Élève introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      currentStudent.establishment_id
+    );
+    if (estId !== currentStudent.establishment_id) {
+      return { error: "Vous n'avez pas accès à cet élève." };
+    }
 
     // Check unique student number if changed
     if (validated.data.student_number && validated.data.student_number !== currentStudent.student_number) {
@@ -344,11 +356,19 @@ export async function deleteStudentAction(id: string): Promise<ActionResult<void
     const db = await getDb();
     const { data: student } = await db
       .from("students")
-      .select("user_id")
+      .select("user_id, establishment_id")
       .eq("id", id)
       .maybeSingle();
 
     if (!student) return { error: "Élève introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      student.establishment_id
+    );
+    if (estId !== student.establishment_id) {
+      return { error: "Vous n'avez pas accès à cet élève." };
+    }
 
     const { error } = await db.auth.admin.deleteUser(student.user_id);
     if (error) {

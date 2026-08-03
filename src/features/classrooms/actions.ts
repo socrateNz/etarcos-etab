@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -208,6 +208,13 @@ export async function updateClassroomAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "classrooms", id, authResult.session!.user.establishment_id,
+      "Classe introuvable.", "Vous n'avez pas accès à cette classe."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     if (payload.code) payload.code = payload.code.toUpperCase();
     delete payload.establishment_id;
@@ -255,6 +262,22 @@ export async function deleteClassroomAction(id: string): Promise<ActionResult<vo
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("classrooms")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Classe introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à cette classe." };
+    }
+
     const { count } = await db
       .from("students")
       .select("id", { count: "exact", head: true })
@@ -337,5 +360,66 @@ export async function listAcademicYearsOptions(
     return { success: true, data: data ?? [] };
   } catch {
     return { error: "Impossible de charger les années académiques." };
+  }
+}
+
+export async function createClassroomsBatchAction(
+  levelId: string,
+  academicYearId: string,
+  trackId: string | null,
+  items: { name: string; code: string; capacity?: number }[]
+): Promise<ActionResult<Classroom[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins une classe." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    let yearId = academicYearId;
+    if (!yearId) {
+      const { data: currentYear } = await db
+        .from("academic_years")
+        .select("id")
+        .eq("establishment_id", estId)
+        .eq("is_current", true)
+        .maybeSingle();
+
+      if (!currentYear) {
+        return { error: "Aucune année académique active n'est configurée." };
+      }
+      yearId = currentYear.id;
+    }
+
+    const payload = items.map((item) => ({
+      establishment_id: estId,
+      level_id: levelId,
+      track_id: trackId || null,
+      academic_year_id: yearId,
+      name: item.name.trim(),
+      code: item.code.trim().toUpperCase(),
+      capacity: item.capacity ?? 40,
+    }));
+
+    const { data, error } = await db
+      .from("classrooms")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/classes");
+    return { success: true, data: data as Classroom[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des classes." };
   }
 }

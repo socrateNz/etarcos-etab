@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -206,6 +206,13 @@ export async function updateCycleAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "cycles", id, authResult.session!.user.establishment_id,
+      "Cycle introuvable.", "Vous n'avez pas accès à ce cycle."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     if (payload.code) payload.code = payload.code.toUpperCase();
     delete payload.establishment_id;
@@ -232,6 +239,22 @@ export async function deleteCycleAction(id: string): Promise<ActionResult<void>>
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("cycles")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Cycle introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce cycle." };
+    }
+
     const { count } = await db
       .from("levels")
       .select("id", { count: "exact", head: true })
@@ -383,6 +406,13 @@ export async function updateLevelAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "levels", id, authResult.session!.user.establishment_id,
+      "Niveau introuvable.", "Vous n'avez pas accès à ce niveau."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     if (payload.code) payload.code = payload.code.toUpperCase();
     delete payload.establishment_id;
@@ -409,6 +439,22 @@ export async function deleteLevelAction(id: string): Promise<ActionResult<void>>
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("levels")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Niveau introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à ce niveau." };
+    }
+
     const { count } = await db
       .from("classrooms")
       .select("id", { count: "exact", head: true })
@@ -427,5 +473,101 @@ export async function deleteLevelAction(id: string): Promise<ActionResult<void>>
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression." };
+  }
+}
+
+// ========== BATCH CREATION ACTIONS ==========
+
+export async function createLevelsBatchAction(
+  cycleId: string,
+  items: { name: string; code: string; order?: number }[]
+): Promise<ActionResult<Level[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins un niveau." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    const { data: cycle } = await db
+      .from("cycles")
+      .select("id, establishment_id")
+      .eq("id", cycleId)
+      .maybeSingle();
+
+    if (!cycle || cycle.establishment_id !== estId) {
+      return { error: "Cycle invalide pour cet établissement." };
+    }
+
+    const payload = items.map((item, idx) => ({
+      establishment_id: estId,
+      cycle_id: cycleId,
+      name: item.name.trim(),
+      code: item.code.trim().toUpperCase(),
+      order: item.order ?? (idx + 1),
+    }));
+
+    const { data, error } = await db
+      .from("levels")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/cycles");
+    return { success: true, data: data as Level[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des niveaux." };
+  }
+}
+
+export async function createCyclesBatchAction(
+  items: { name: string; code: string; description?: string; order?: number }[]
+): Promise<ActionResult<Cycle[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins un cycle." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+
+    const payload = items.map((item, idx) => ({
+      establishment_id: estId,
+      name: item.name.trim(),
+      code: item.code.trim().toUpperCase(),
+      description: item.description?.trim() || null,
+      order: item.order ?? (idx + 1),
+    }));
+
+    const { data, error } = await db
+      .from("cycles")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/cycles");
+    return { success: true, data: data as Cycle[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des cycles." };
   }
 }

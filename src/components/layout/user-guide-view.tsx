@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { SYSTEM_ROLES, type SystemRole } from "@/types/auth";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -183,8 +183,72 @@ export function UserGuideView() {
   const currentRole = user?.role || "director";
   const [selectedRole, setSelectedRole] = useState<string>(currentRole);
 
+  // Synchronize with logged-in user role when component mounts or user updates
+  useEffect(() => {
+    if (user?.role) {
+      setSelectedRole(user.role);
+    }
+  }, [user?.role]);
+
   const guide = ROLE_GUIDES[selectedRole] || ROLE_GUIDES.director;
   const RoleIcon = guide.icon;
+
+  const CREATION_WORKFLOW_STEPS = [
+    {
+      step: "1",
+      title: "Infrastructure & Année Académique",
+      creator: "SuperAdmin / Promoteur",
+      roles: ["super_admin", "owner"],
+      badgeColor: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+      items: ["1. Créer l'Établissement", "2. Configurer l'Année Académique active (ex: 2025-2026)", "3. Créer le compte du Directeur et du Comptable"],
+      link: { label: "Établissements", path: "/establishments" },
+    },
+    {
+      step: "2",
+      title: "Structure Pédagogique & Programme",
+      creator: "Directeur / Proviseur",
+      roles: ["super_admin", "owner", "director"],
+      badgeColor: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+      items: ["1. Créer les Cycles et Niveaux (6ème... Tle)", "2. Enregistrer les Filières (Série C, D, A4)", "3. Définir les Matières et leurs coefficients"],
+      link: { label: "Matières & Programme", path: "/subjects" },
+    },
+    {
+      step: "3",
+      title: "Personnel, Salles & Classes",
+      creator: "Directeur & Censeur",
+      roles: ["super_admin", "owner", "director", "censor"],
+      badgeColor: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+      items: ["1. Créer les comptes Enseignants", "2. Enregistrer les Salles physiques", "3. Créer les Classes et attribuer les Professeurs Principaux"],
+      link: { label: "Classes & Salles", path: "/classes" },
+    },
+    {
+      step: "4",
+      title: "Inscriptions Élèves & Scolarité",
+      creator: "Secrétaire & Économe",
+      roles: ["super_admin", "owner", "director", "secretary", "accountant"],
+      badgeColor: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      items: ["1. Créer les Fiches Tuteurs / Parents", "2. Inscrire l'Élève avec son Matricule et l'affecter à sa Classe", "3. Enregistrer les versments de scolarité et imprimer le Reçu"],
+      link: { label: "Élèves & Inscriptions", path: "/students" },
+    },
+    {
+      step: "5",
+      title: "Planning, Absences & Saisie des Notes",
+      creator: "Censeur & Enseignants",
+      roles: ["super_admin", "owner", "director", "censor", "teacher"],
+      badgeColor: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+      items: ["1. Générer l'Emploi du Temps par classe et enseignant", "2. Renseigner le Registre d'Absences", "3. Saisir les notes d'évaluations par matière et période (T1, T2, T3)"],
+      link: { label: "Saisie des Notes", path: "/grades" },
+    },
+    {
+      step: "6",
+      title: "Calcul & Impression des Bulletins",
+      creator: "Système (Calcul) & Directeur (Édition)",
+      roles: ["super_admin", "owner", "director", "censor", "student", "parent"],
+      badgeColor: "bg-rose-500/10 text-rose-500 border-rose-500/20",
+      items: ["1. Le système calcule les moyennes, rangs et mentions automatiquement", "2. Consulter le bulletin trimestriel récapitulatif", "3. Lancer l'Impression Groupée de toute la classe"],
+      link: { label: "Bulletins de Notes", path: "/report-cards" },
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -195,12 +259,12 @@ export function UserGuideView() {
             <BookOpen className="w-5 h-5 text-primary" /> Manuel d'Utilisation interactif
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Consultez le guide pas-à-pas adapté à votre rôle ou sélectionnez un autre profil pour découvrir ses fonctionnalités.
+            Connecté en tant que <strong className="text-primary">{user?.name || "Utilisateur"}</strong> ({guide.title}). Le guide s'adapte automatiquement à votre rôle.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">Changer de rôle :</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">Filtrer par rôle :</span>
           <select
             value={selectedRole}
             onChange={(e) => setSelectedRole(e.target.value)}
@@ -245,7 +309,7 @@ export function UserGuideView() {
       {/* Step by Step Guide Grid */}
       <div className="space-y-4">
         <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-primary" /> Étapes clés du flux de travail
+          <CheckCircle2 className="w-4 h-4 text-primary" /> Étapes clés pour {guide.title}
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -295,6 +359,65 @@ export function UserGuideView() {
           </ul>
         </CardContent>
       </Card>
+
+      {/* Global System Creation Workflow (Filtered by Role) */}
+      <div className="space-y-4 pt-4 border-t border-border/40">
+        <div>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-primary" /> Séquence de Création (Vue : {guide.title})
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Ordre chronologique des actions et interventions dans le système pour le rôle sélectionné.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {CREATION_WORKFLOW_STEPS.filter((item) =>
+            item.roles.includes(selectedRole as any)
+          ).map((item) => (
+            <Card
+              key={item.step}
+              className="border-border/60 bg-card/90 border-primary/30 shadow-sm transition-all hover:border-primary/50"
+            >
+              <CardContent className="pt-4 pb-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <span className="w-7 h-7 rounded-lg bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                      {item.step}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-foreground">{item.title}</h4>
+                        <Badge variant="outline" className={`text-[10px] ${item.badgeColor}`}>
+                          Créé par : {item.creator}
+                        </Badge>
+                        <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px]">
+                          Action requise
+                        </Badge>
+                      </div>
+                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {item.items.map((sub, i) => (
+                          <li key={i} className="flex items-center gap-1.5">
+                            <span className="w-1 h-1 rounded-full bg-muted-foreground/60" />
+                            {sub}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <Link
+                    href={item.link.path}
+                    className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold hover:bg-muted transition-colors whitespace-nowrap self-start md:self-center"
+                  >
+                    {item.link.label} <ArrowRight className="w-3.5 h-3.5 ml-1.5 text-primary" />
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

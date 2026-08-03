@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -192,6 +192,13 @@ export async function updateRoomAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "rooms", id, authResult.session!.user.establishment_id,
+      "Salle introuvable.", "Vous n'avez pas accès à cette salle."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     delete payload.establishment_id;
 
@@ -237,6 +244,22 @@ export async function deleteRoomAction(id: string): Promise<ActionResult<void>> 
 
   try {
     const db = await getDb();
+
+    const { data: existing } = await db
+      .from("rooms")
+      .select("establishment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return { error: "Salle introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      existing.establishment_id
+    );
+    if (estId !== existing.establishment_id) {
+      return { error: "Vous n'avez pas accès à cette salle." };
+    }
+
     const { error } = await db.from("rooms").delete().eq("id", id);
     if (error) return { error: error.message };
 
@@ -244,5 +267,54 @@ export async function deleteRoomAction(id: string): Promise<ActionResult<void>> 
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression." };
+  }
+}
+
+export async function createRoomsBatchAction(
+  items: {
+    name: string;
+    type?: "classroom" | "lab" | "library" | "gym" | "office" | "other";
+    capacity?: number;
+    building?: string;
+    floor?: number;
+  }[]
+): Promise<ActionResult<Room[]>> {
+  const authResult = await requireAuth("create");
+  if (authResult.error) return { error: authResult.error };
+
+  if (!items || items.length === 0) {
+    return { error: "Veuillez spécifier au moins une salle." };
+  }
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id
+  );
+  if (!estId) {
+    return { error: "Aucun établissement associé à votre compte." };
+  }
+
+  try {
+    const db = await getDb();
+    const payload = items.map((item) => ({
+      establishment_id: estId,
+      name: item.name.trim(),
+      type: item.type ?? "classroom",
+      capacity: item.capacity ?? 40,
+      building: item.building || null,
+      floor: item.floor ?? 0,
+      is_available: true,
+    }));
+
+    const { data, error } = await db
+      .from("rooms")
+      .insert(payload)
+      .select();
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/rooms");
+    return { success: true, data: data as Room[] };
+  } catch {
+    return { error: "Erreur lors de la création groupée des salles." };
   }
 }

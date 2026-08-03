@@ -125,7 +125,7 @@ export function ParentsPage() {
                 setEditingParent(null);
                 setFormOpen(true);
               }}
-              className="gap-2 bg-brand-500 hover:bg-brand-600 text-white"
+              className="gap-2 bg-brand-500 hover:bg-brand-600 text-slate-950 dark:text-white font-semibold"
             >
               <Plus className="size-4" />
               Nouveau parent

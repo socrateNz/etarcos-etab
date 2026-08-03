@@ -60,7 +60,7 @@ export default function AiAssistantPage() {
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-140px)]">
       <PageHeader
-        title="Assistant IA Gemini"
+        title="Assistant Etarcos AI"
         description="Analysez les données académiques et obtenez des prédictions préventives sur la scolarité de vos élèves."
         icon={Sparkles}
       />
@@ -71,16 +71,14 @@ export default function AiAssistantPage() {
         <div className="flex-1 p-4 overflow-y-auto space-y-4">
           {messages.map((m, index) => (
             <div key={index} className={`flex gap-3 max-w-[80%] ${m.role === "user" ? "ml-auto flex-row-reverse" : ""}`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                m.role === "user" ? "bg-brand-500/20 text-brand-400" : "bg-cyan-500/20 text-cyan-400"
-              }`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${m.role === "user" ? "bg-brand-500/20 text-brand-400" : "bg-cyan-500/20 text-cyan-400"
+                }`}>
                 {m.role === "user" ? <User className="w-4.5 h-4.5" /> : <Bot className="w-4.5 h-4.5" />}
               </div>
-              <div className={`p-3.5 rounded-xl text-sm leading-relaxed border ${
-                m.role === "user" 
-                  ? "bg-brand-500/10 border-brand-500/20 text-foreground rounded-tr-none" 
+              <div className={`p-3.5 rounded-xl text-sm leading-relaxed border ${m.role === "user"
+                  ? "bg-brand-500/10 border-brand-500/20 text-foreground rounded-tr-none"
                   : "bg-background border-border text-foreground rounded-tl-none"
-              }`}>
+                }`}>
                 <p className="whitespace-pre-wrap">{m.content}</p>
               </div>
             </div>
@@ -117,11 +115,11 @@ export default function AiAssistantPage() {
 
         {/* Input Bar */}
         <div className="p-4 border-t border-border bg-background/50">
-          <form 
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend(input);
-            }} 
+            }}
             className="flex items-center gap-2"
           >
             <Input
@@ -131,8 +129,8 @@ export default function AiAssistantPage() {
               className="bg-background border-border flex-1"
               disabled={loading}
             />
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={loading || !input.trim()}
               className="bg-brand-500 hover:bg-brand-600 text-white"
             >

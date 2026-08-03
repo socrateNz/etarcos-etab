@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const gradeEntryItemSchema = z.object({
+  grade_id: z.string().optional(),
   student_id: z.string().uuid(),
   value: z.coerce.number().min(0, "Note min 0"),
   comment: z.string().optional().nullable(),
@@ -26,3 +27,11 @@ export const listGradesSchema = z.object({
 export type SaveGradesInput = z.infer<typeof saveGradesSchema>;
 export type ListGradesInput = z.infer<typeof listGradesSchema>;
 export type GradeEntryItem = z.infer<typeof gradeEntryItemSchema>;
+
+/** Local-only type for the grade input state — allows null value for un-graded (draft) rows */
+export type LocalGradeItem = {
+  grade_id?: string;
+  student_id: string;
+  value: number | null;
+  comment?: string | null;
+};

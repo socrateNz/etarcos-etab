@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -158,6 +158,13 @@ export async function updateExpenseAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "expenses", id, authResult.session!.user.establishment_id,
+      "Dépense introuvable.", "Vous n'avez pas accès à cette dépense."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     delete payload.establishment_id;
 
@@ -185,6 +192,13 @@ export async function deleteExpenseAction(id: string): Promise<ActionResult<void
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "expenses", id, authResult.session!.user.establishment_id,
+      "Dépense introuvable.", "Vous n'avez pas accès à cette dépense."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("expenses").delete().eq("id", id);
     if (error) return { error: error.message };
 

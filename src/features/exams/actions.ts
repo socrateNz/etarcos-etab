@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -182,6 +182,13 @@ export async function updateExamAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "exams", id, authResult.session!.user.establishment_id,
+      "Examen introuvable.", "Vous n'avez pas accès à cet examen."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const payload = { ...validated.data };
     delete payload.establishment_id;
     delete payload.academic_year_id;
@@ -213,6 +220,13 @@ export async function deleteExamAction(id: string): Promise<ActionResult<void>> 
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "exams", id, authResult.session!.user.establishment_id,
+      "Examen introuvable.", "Vous n'avez pas accès à cet examen."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("exams").delete().eq("id", id);
     if (error) return { error: error.message };
 

@@ -8,6 +8,7 @@ import type { NextAuthConfig } from "next-auth";
 import { loginSchema } from "@/schemas/auth";
 import { createClient } from "@supabase/supabase-js";
 import { getPermissionsForRole } from "@/types/permissions";
+import { checkLoginRateLimit } from "@/lib/auth/rate-limit";
 import type { SystemRole } from "@/types/auth";
 
 // IMPORTANT: Les permissions NE sont PAS stockées dans le JWT (trop volumineux → HTTP 431)
@@ -42,11 +43,18 @@ export const authConfig: NextAuthConfig = {
         email: { label: "Email", type: "email" },
         password: { label: "Mot de passe", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
+
+        // Rate-limit by IP + email so a single attacker can't brute-force one
+        // account, and a compromised IP can't hammer many accounts either.
+        const forwardedFor = request.headers.get("x-forwarded-for");
+        const ip = forwardedFor?.split(",")[0]?.trim() || "unknown";
+        const { allowed } = await checkLoginRateLimit(`${ip}:${email.toLowerCase()}`);
+        if (!allowed) return null;
 
         try {
           // 1. Authentification via client anon (stocke la session USER sur ce client uniquement)
@@ -99,6 +107,81 @@ export const authConfig: NextAuthConfig = {
                 .maybeSingle();
               if (roleData?.slug) role = roleData.slug as SystemRole;
             }
+
+            // Fallback: If user has no user_roles record, check staff_members table
+            if (role === "student") {
+              const { data: staffRow } = await db
+                .from("staff_members")
+                .select("position, establishment_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+              if (staffRow?.position) {
+                const pos = staffRow.position.toLowerCase();
+                if (pos.includes("direct") || pos.includes("dir")) role = "director";
+                else if (pos.includes("cens") || pos.includes("survei")) role = "censor";
+                else if (pos.includes("compt") || pos.includes("financ") || pos.includes("account")) role = "accountant";
+                else if (pos.includes("secr")) role = "secretary";
+                else if (pos.includes("biblio") || pos.includes("lib")) role = "librarian";
+                else if (pos.includes("lab")) role = "lab_manager";
+                else role = "teacher";
+
+                // Auto-create role in roles table if missing and insert into user_roles
+                let { data: roleObj } = await db
+                  .from("roles")
+                  .select("id")
+                  .or(`slug.eq.${role},name.eq.${role}`)
+                  .maybeSingle();
+
+                if (!roleObj) {
+                  const { data: newRole } = await db
+                    .from("roles")
+                    .insert({
+                      name: role === "director" ? "Directeur d'Établissement" : role.charAt(0).toUpperCase() + role.slice(1),
+                      slug: role,
+                      is_system: true,
+                    })
+                    .select("id")
+                    .single();
+                  roleObj = newRole;
+                }
+
+                if (roleObj) {
+                  await db.from("user_roles").insert({
+                    user_id: userId,
+                    role_id: roleObj.id,
+                    establishment_id: staffRow.establishment_id || (userProfile as any).establishment_id,
+                  });
+                }
+              }
+            }
+          }
+
+          let finalEstablishmentId = (userProfile as any).establishment_id;
+          if (!finalEstablishmentId) {
+            const { data: urEst } = await db
+              .from("user_roles")
+              .select("establishment_id")
+              .eq("user_id", userId)
+              .not("establishment_id", "is", null)
+              .limit(1)
+              .maybeSingle();
+
+            if (urEst?.establishment_id) {
+              finalEstablishmentId = urEst.establishment_id;
+            } else {
+              const { data: staffEst } = await db
+                .from("staff_members")
+                .select("establishment_id")
+                .eq("user_id", userId)
+                .not("establishment_id", "is", null)
+                .limit(1)
+                .maybeSingle();
+
+              if (staffEst?.establishment_id) {
+                finalEstablishmentId = staffEst.establishment_id;
+              }
+            }
           }
 
           return {
@@ -107,7 +190,7 @@ export const authConfig: NextAuthConfig = {
             name: (userProfile as any).name,
             image: (userProfile as any).avatar_url,
             role,
-            establishment_id: (userProfile as any).establishment_id,
+            establishment_id: finalEstablishmentId,
             requires_password_change: requiresChange,
           };
         } catch (error) {
@@ -151,20 +234,11 @@ export const authConfig: NextAuthConfig = {
       return session;
     },
 
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isOnDashboard = !nextUrl.pathname.startsWith("/login") &&
-        !nextUrl.pathname.startsWith("/register");
-
-      if (isOnDashboard) {
-        if (isLoggedIn) return true;
-        return false;
-      } else if (isLoggedIn) {
-        return Response.redirect(new URL("/dashboard", nextUrl));
-      }
-
-      return true;
-    },
+    // NOTE: route protection is NOT done via an `authorized` callback here —
+    // this custom Next.js build renames middleware.ts to proxy.ts, and
+    // src/proxy.ts implements its own redirect logic directly instead of
+    // relying on this callback (which the `auth((req) => ...)` wrapper it
+    // uses never invokes). Keep both in sync if you touch either one.
   },
 
   session: {

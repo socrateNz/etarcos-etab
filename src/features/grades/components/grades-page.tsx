@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Award, BookOpen, Save, Loader2, ArrowRight } from "lucide-react";
+import { Award, BookOpen, Save, Loader2, ArrowRight, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useClassrooms } from "@/features/classrooms";
 import { useSubjects } from "@/features/subjects";
-import { useClassroomGrades, useSaveGrades } from "../hooks/use-grades";
-import type { GradeEntryItem } from "../schemas";
+import { useClassroomGrades, useSaveGrades, useDeleteGrade } from "../hooks/use-grades";
+import type { GradeEntryItem, LocalGradeItem } from "../schemas";
 
 type PeriodType = "T1" | "T2" | "T3" | "S1" | "S2";
 type EvalType = "test" | "exam" | "homework" | "oral" | "practical";
@@ -51,17 +51,20 @@ export function GradesPage() {
   const gradesData = rawGradesData ?? EMPTY_GRADES;
 
   const saveGrades = useSaveGrades();
+  const deleteGrade = useDeleteGrade();
 
   // Local state to keep modified grades input
-  const [localGrades, setLocalGrades] = useState<GradeEntryItem[]>([]);
+  const [localGrades, setLocalGrades] = useState<LocalGradeItem[]>([]);
 
   // Update local inputs when database values load
   useEffect(() => {
     if (gradesData.length > 0) {
       setLocalGrades(
         gradesData.map((g) => ({
+          grade_id: g.id && !g.id.startsWith("draft_") ? g.id : undefined,
           student_id: g.student_id,
-          value: Number(g.value),
+          // null means draft (not yet graded); keep null so unsaved rows aren't sent as 0
+          value: (g.value !== null && g.value !== undefined) ? Number(g.value) : (g as any).score !== null && (g as any).score !== undefined ? Number((g as any).score) : null,
           comment: g.comment || "",
         }))
       );
@@ -75,8 +78,16 @@ export function GradesPage() {
   }, [gradesData]);
 
   const handleGradeChange = (studentId: string, val: string) => {
-    let num = parseFloat(val);
-    if (isNaN(num)) num = 0;
+    if (val === "" || val === null || val === undefined) {
+      // User cleared the field — set to null (won't be saved)
+      setLocalGrades((prev) =>
+        prev.map((g) => (g.student_id === studentId ? { ...g, value: null } : g))
+      );
+      return;
+    }
+    const cleanVal = val.replace(",", ".");
+    let num = parseFloat(cleanVal);
+    if (isNaN(num)) return;
     if (num < 0) num = 0;
     if (num > maxValue) num = maxValue;
 
@@ -95,6 +106,16 @@ export function GradesPage() {
     e.preventDefault();
     if (selectedClassId === "all" || selectedSubjectId === "all") return;
 
+    // Only send rows where the user entered a real numeric value
+    // Cast is safe because we've already filtered out null values above
+    const gradesToSave = localGrades.filter(
+      (g): g is LocalGradeItem & { value: number } =>
+        g.value !== null && g.value !== undefined && !isNaN(Number(g.value))
+    );
+    if (gradesToSave.length === 0) {
+      return;
+    }
+
     await saveGrades.mutateAsync({
       classroom_id: selectedClassId,
       subject_id: selectedSubjectId,
@@ -102,12 +123,12 @@ export function GradesPage() {
       type: selectedType,
       coefficient: coef,
       max_value: maxValue,
-      grades: localGrades,
+      grades: gradesToSave as GradeEntryItem[],
     });
   };
 
-  // Math Statistics
-  const validMarks = localGrades.map((g) => g.value);
+  // Math Statistics — only count rows that have an actual numeric value
+  const validMarks = localGrades.map((g) => g.value).filter((v): v is number => v !== null && !isNaN(v));
   const average =
     validMarks.length > 0
       ? (validMarks.reduce((acc, val) => acc + val, 0) / validMarks.length).toFixed(2)
@@ -130,7 +151,7 @@ export function GradesPage() {
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="all">Sélectionner une classe...</option>
             {classrooms.map((c) => (
@@ -146,7 +167,7 @@ export function GradesPage() {
           <select
             value={selectedSubjectId}
             onChange={(e) => setSelectedSubjectId(e.target.value)}
-            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="all">Sélectionner une matière...</option>
             {subjects.map((s) => (
@@ -162,7 +183,7 @@ export function GradesPage() {
           <select
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
-            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="T1">Trimestre 1</option>
             <option value="T2">Trimestre 2</option>
@@ -177,7 +198,7 @@ export function GradesPage() {
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value as EvalType)}
-            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-slate-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="test">Contrôle Continu</option>
             <option value="exam">Examen Trimestriel</option>
@@ -251,11 +272,11 @@ export function GradesPage() {
                   </div>
                 </div>
 
-                <Button type="submit" disabled={saveGrades.isPending} className="bg-brand-500 hover:bg-brand-600 text-white gap-1.5 h-8 text-xs font-sans">
+                <Button type="submit" disabled={saveGrades.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-9 px-4 text-xs font-bold shadow-sm">
                   {saveGrades.isPending ? (
-                    <Loader2 className="size-3 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <Save className="size-3" />
+                    <Save className="size-4" />
                   )}
                   Enregistrer les notes
                 </Button>
@@ -276,20 +297,26 @@ export function GradesPage() {
                         <th className="p-4 w-[160px]">Note obtenus</th>
                         <th className="p-4 w-[160px]">Mention / Appréciation</th>
                         <th className="p-4">Commentaire / Remarque</th>
+                        <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y text-sm">
                       {gradesData.map((g) => {
                         const localItem = localGrades.find((l) => l.student_id === g.student_id);
-                        const val = localItem ? localItem.value : 0;
+                        const val = (localItem?.value !== null && localItem?.value !== undefined) ? localItem.value : null;
                         const comment = localItem ? localItem.comment : "";
 
                         // dynamic appreciation
-                        let statusText = "Insuffisant";
-                        if (val >= 16) statusText = "Très Bien";
-                        else if (val >= 14) statusText = "Bien";
-                        else if (val >= 12) statusText = "Assez Bien";
-                        else if (val >= 10) statusText = "Passable";
+                        let statusText = "—";
+                        if (val !== null) {
+                          if (val >= 16) statusText = "Très Bien";
+                          else if (val >= 14) statusText = "Bien";
+                          else if (val >= 12) statusText = "Assez Bien";
+                          else if (val >= 10) statusText = "Passable";
+                          else statusText = "Insuffisant";
+                        }
+
+                        const isSaved = g.id && !g.id.startsWith("draft_");
 
                         return (
                           <tr key={g.student_id} className="hover:bg-muted/5 transition-colors">
@@ -300,27 +327,27 @@ export function GradesPage() {
                               {g.student?.user?.name}
                             </td>
                             <td className="p-4">
-                              <div className="flex items-center gap-1.5">
-                                <Input
-                                  type="number"
-                                  step="0.25"
-                                  min="0"
-                                  max={maxValue}
-                                  value={localItem ? localItem.value : ""}
-                                  onChange={(e) => handleGradeChange(g.student_id, e.target.value)}
-                                  className="w-20 font-mono text-center h-8"
-                                />
-                                <span className="text-xs text-muted-foreground">/{maxValue}</span>
-                              </div>
+                              <Input
+                                type="number"
+                                step="0.25"
+                                min="0"
+                                max={maxValue}
+                                value={val !== null && val !== undefined ? val : ""}
+                                onChange={(e) => handleGradeChange(g.student_id, e.target.value)}
+                                className="w-20 font-mono text-center h-8"
+                              />
+                              <span className="text-xs text-muted-foreground">/{maxValue}</span>
                             </td>
                             <td className="p-4">
                               <span
                                 className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                                  val >= 12
-                                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                                    : val >= 10
-                                      ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
-                                      : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                  val === null
+                                    ? "bg-muted text-muted-foreground border-border"
+                                    : val >= 12
+                                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                      : val >= 10
+                                        ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                                        : "bg-rose-500/10 text-rose-500 border-rose-500/20"
                                 }`}
                               >
                                 {statusText}
@@ -333,6 +360,21 @@ export function GradesPage() {
                                 placeholder="Encouragements, bavardages..."
                                 className="w-full h-8 text-xs bg-muted/30"
                               />
+                            </td>
+                            <td className="p-4 text-right">
+                              {isSaved && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={deleteGrade.isPending}
+                                  onClick={() => deleteGrade.mutate(g.id)}
+                                  className="text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 h-8 w-8 p-0"
+                                  title="Supprimer cette note"
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         );

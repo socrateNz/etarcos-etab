@@ -1,109 +1,52 @@
-import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { listStudents, createStudentAction } from "@/features/students/actions";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") || "";
 
-  // Get students list
-  try {
-    const supabase = (await createAdminClient()) as any;
-    const estId = (await resolveEstablishmentId(
-      session.user.establishment_id,
-      searchParams.get("establishment_id") || undefined
-    )) || "00000000-0000-0000-0000-000000000000";
+  const res = await listStudents({
+    search: searchParams.get("search") || undefined,
+    establishment_id: searchParams.get("establishment_id") || undefined,
+  });
 
-    let query = supabase
-      .from("students")
-      .select("id, student_number, enrollment_date, status, user:users(name), classroom:classrooms(name)")
-      .eq("establishment_id", estId);
-
-    if (search) {
-      // Simplistic search constraint
-      query = query.ilike("student_number", `%${search}%`);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    // Format structure
-    const list = data.map((s: any) => ({
-      id: s.id,
-      student_number: s.student_number,
-      name: s.user?.name || "Sans nom",
-      class: s.classroom?.name || "Sans classe",
-      enrollment_date: s.enrollment_date,
-      status: s.status,
-    }));
-
-    return NextResponse.json({ data: list });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (res.error) {
+    const status = res.error === "Non autorisé." || res.error === "Permission refusée." ? 403 : 500;
+    return NextResponse.json({ error: res.error }, { status });
   }
+
+  const list = res.data!.data.map((s) => ({
+    id: s.id,
+    student_number: s.student_number,
+    name: s.user?.name || "Sans nom",
+    class: s.classroom?.name || "Sans classe",
+    enrollment_date: s.enrollment_date,
+    status: s.status,
+  }));
+
+  return NextResponse.json({ data: list });
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
+  let body: any;
   try {
-    const body = await req.json();
-    const { name, classId, studentNumber } = body;
-
-    if (!name || !studentNumber) {
-      return NextResponse.json({ error: "Champs obligatoires manquants" }, { status: 400 });
-    }
-
-    const supabase = (await createAdminClient()) as any;
-    const estId = (await resolveEstablishmentId(
-      session.user.establishment_id,
-      body.establishment_id
-    )) || "00000000-0000-0000-0000-000000000000";
-
-    // 1. Create Supabase Auth user record (simplistic simulation)
-    // Normally, this involves Edge functions or Admin SDK. Let's create user profile directly.
-    const { data: newUserProfile, error: profileError } = await supabase
-      .from("users")
-      .insert({
-        email: `${studentNumber.toLowerCase()}@etarcos-etab.com`,
-        name,
-        establishment_id: estId,
-        is_active: true,
-      } as any)
-      .select()
-      .single();
-
-    if (profileError) throw profileError;
-
-    const newUserId = (newUserProfile as any)?.id;
-
-    // 2. Insert Student
-    const { data: student, error: studentError } = await supabase
-      .from("students")
-      .insert({
-        establishment_id: estId,
-        user_id: newUserId,
-        student_number: studentNumber,
-        classroom_id: classId || null,
-        academic_year_id: "20262026-2026-2026-2026-202620262026", // should fetch current active year
-        status: "active",
-      } as any)
-      .select()
-      .single();
-
-    if (studentError) throw studentError;
-
-    return NextResponse.json({ success: true, data: student }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Corps de requête JSON invalide" }, { status: 400 });
   }
+
+  const res = await createStudentAction({
+    name: body.name,
+    student_number: body.studentNumber,
+    classroom_id: body.classId || null,
+    establishment_id: body.establishment_id,
+    scholarship_type: "none",
+    status: "active",
+  });
+
+  if (res.error) {
+    const status = res.error === "Non autorisé." || res.error === "Permission refusée." ? 403 : 400;
+    return NextResponse.json({ error: res.error }, { status });
+  }
+
+  return NextResponse.json({ success: true, data: res.data }, { status: 201 });
 }

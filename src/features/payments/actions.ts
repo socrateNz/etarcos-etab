@@ -1,6 +1,7 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import { computePaymentStatus } from "./calculations";
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -137,6 +138,13 @@ export async function deleteFeeCategoryAction(id: string): Promise<ActionResult<
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "fee_categories", id, authResult.session!.user.establishment_id,
+      "Catégorie de frais introuvable.", "Vous n'avez pas accès à cette catégorie de frais."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("fee_categories").delete().eq("id", id);
     if (error) return { error: error.message };
 
@@ -245,12 +253,7 @@ export async function createPaymentAction(
 
     const totalAmount = Number(feeCategory.amount);
     const amountPaid = validated.data.amount_paid;
-    const balance = totalAmount - amountPaid;
-
-    let status: "paid" | "partial" | "pending" = "partial";
-    if (balance <= 0) {
-      status = "paid";
-    }
+    const status = computePaymentStatus(totalAmount, amountPaid);
 
     // 3. Generate a receipt number
     const receiptNumber = `REC-${Date.now().toString().slice(-8)}`;
@@ -301,6 +304,13 @@ export async function updatePaymentAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "payments", id, authResult.session!.user.establishment_id,
+      "Paiement introuvable.", "Vous n'avez pas accès à ce paiement."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { amount_paid, payment_method, status, notes } = validated.data;
 
     const { data, error } = await db
@@ -331,6 +341,13 @@ export async function deletePaymentAction(id: string): Promise<ActionResult<void
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "payments", id, authResult.session!.user.establishment_id,
+      "Paiement introuvable.", "Vous n'avez pas accès à ce paiement."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("payments").delete().eq("id", id);
     if (error) return { error: error.message };
 

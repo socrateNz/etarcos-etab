@@ -2,6 +2,8 @@
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
+import { generateTemporaryPassword } from "@/lib/auth/password";
+import { sendWelcomeEmail } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
 async function requireSuperAdmin() {
@@ -50,7 +52,7 @@ export async function createOwnerAction(values: { name: string; email: string; p
     if (existingUser) return { error: "Cet email est déjà utilisé." };
 
     // 1. Create in Supabase Auth
-    const password = Math.random().toString(36).slice(-8); // Default random password
+    const password = generateTemporaryPassword();
     const { data: authUser, error: authError } = await db.auth.admin.createUser({
       email: emailLower,
       email_confirm: true,
@@ -98,6 +100,8 @@ export async function createOwnerAction(values: { name: string; email: string; p
       await db.from("users").delete().eq("id", userId);
       return { error: ownerError.message };
     }
+
+    await sendWelcomeEmail({ email: emailLower, name: values.name, tempPassword: password });
 
     revalidatePath("/owners");
     return { success: true, data: { ...ownerProfile, password } };
@@ -222,16 +226,23 @@ export async function updateEstablishmentPlan(id: string, plan: string) {
 // ========== SYSTEM NOTIFICATIONS ==========
 
 export async function listNotificationsAction() {
-  await requireSuperAdmin();
   try {
+    const session = await auth();
+    if (!session?.user) {
+      return { error: "Non authentifié." };
+    }
+
     const db = await getDb();
-    const { data, error } = await db
-      .from("notifications")
-      .select("*, user:users(name)")
-      .order("created_at", { ascending: false });
+    let query = db.from("notifications").select("*, user:users(name)");
+
+    if (session.user.role !== "super_admin") {
+      query = query.eq("user_id", session.user.id);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
-    return { data };
+    return { data: data ?? [] };
   } catch (err: any) {
     return { error: err.message };
   }

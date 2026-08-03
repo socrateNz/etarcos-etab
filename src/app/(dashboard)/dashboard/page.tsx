@@ -198,10 +198,10 @@ export default async function DashboardPage() {
       }
       superAdminActivities.sort((a, b) => b.id.localeCompare(a.id));
       recentActivitiesList = superAdminActivities.slice(0, 5);
-    } else {
+    } else if (session?.user?.establishment_id) {
       // School-level Dashboard Queries (Isolated Tenant statistics)
-      const estId = session?.user?.establishment_id || "00000000-0000-0000-0000-000000000000";
-      
+      const estId = session.user.establishment_id;
+
       const { data: dbPayments } = await supabase
         .from("payments")
         .select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))")

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, Pencil, Trash2, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +17,7 @@ import type { StaffMemberWithUser } from "../types";
 interface StaffColumnsOptions {
   onEdit: (row: StaffMemberWithUser) => void;
   onDelete: (row: StaffMemberWithUser) => void;
+  onResetPassword?: (row: StaffMemberWithUser) => void;
   canEdit: boolean;
   canDelete: boolean;
 }
@@ -45,6 +46,7 @@ const statusLabels: Record<string, string> = {
 export function getStaffColumns({
   onEdit,
   onDelete,
+  onResetPassword,
   canEdit,
   canDelete,
 }: StaffColumnsOptions): ColumnDef<StaffMemberWithUser>[] {
@@ -141,6 +143,12 @@ export function getStaffColumns({
             }
           />
           <DropdownMenuContent align="end">
+            {onResetPassword && row.original.user?.requires_password_change !== false && (
+              <DropdownMenuItem onClick={() => onResetPassword(row.original)}>
+                <KeyRound className="size-4 text-indigo-500" />
+                <span>Réinitialiser mot de passe</span>
+              </DropdownMenuItem>
+            )}
             {canEdit && (
               <DropdownMenuItem onClick={() => onEdit(row.original)}>
                 <Pencil className="size-4" />

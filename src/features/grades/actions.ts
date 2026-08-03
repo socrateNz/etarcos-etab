@@ -1,7 +1,8 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
-
+import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import { computeWeightedAverage, averageToMention, averageToAppreciation, type GradeForAverage } from "./calculations";
+import { resolveActiveAcademicYearId } from "@/app/actions/academic-years";
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/types/permissions";
@@ -29,17 +30,119 @@ async function requireAuth(action: CrudAction) {
   return { session };
 }
 
-
-
 async function getDb() {
   return (await createAdminClient()) as any;
+}
+
+// ========== ACTIONS ==========
+
+/**
+ * Charge la matrice des notes pour une classe, matière, période et type donnés.
+ * Retourne la liste des élèves avec leur note (si elle existe).
+ */
+export async function getGradesMatrixAction(
+  classroomId: string,
+  subjectId: string,
+  period: string,
+  type: string,
+  establishmentId?: string
+): Promise<
+  ActionResult<{
+    coefficient: number;
+    max_value: number;
+    students: Array<{
+      student_id: string;
+      student_number: string;
+      student_name: string;
+      grade_id: string | null;
+      score: number | null;
+      comment: string | null;
+    }>;
+  }>
+> {
+  const authResult = await requireAuth("view");
+  if (authResult.error) return { error: authResult.error };
+
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id,
+    establishmentId
+  );
+  if (!estId) return { error: "Établissement requis." };
+
+  try {
+    const db = await getDb();
+
+    // 1. Fetch active academic year
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
+    if (!activeYearId) return { error: "Aucune année académique active configurée." };
+
+    // 2. Fetch default coefficient for subject
+    const { data: subject } = await db
+      .from("subjects")
+      .select("coefficient")
+      .eq("id", subjectId)
+      .maybeSingle();
+
+    const coefficient = subject?.coefficient ?? 1;
+
+    // 3. Fetch active students in classroom
+    const { data: students, error: studErr } = await db
+      .from("students")
+      .select("id, student_number, user:users(name)")
+      .eq("classroom_id", classroomId)
+      .eq("status", "active")
+      .order("student_number");
+
+    if (studErr) return { error: studErr.message };
+
+    // 4. Fetch existing grades for this tuple
+    const { data: existingGrades } = await db
+      .from("grades")
+      .select("*")
+      .eq("establishment_id", estId)
+      .eq("classroom_id", classroomId)
+      .eq("subject_id", subjectId)
+      .eq("academic_year_id", activeYearId)
+      .eq("period", period)
+      .eq("type", type);
+
+    const gradeByStudent = new Map<string, any>();
+    let max_value = 20;
+    (existingGrades ?? []).forEach((g: any) => {
+      gradeByStudent.set(g.student_id, g);
+      if (g.max_value) max_value = g.max_value;
+    });
+
+    const studentList = (students ?? []).map((s: any) => {
+      const g = gradeByStudent.get(s.id);
+      return {
+        student_id: s.id,
+        student_number: s.student_number,
+        student_name: s.user?.name ?? "Sans nom",
+        grade_id: g?.id ?? null,
+        score: g?.score ?? g?.value ?? null,
+        comment: g?.comment ?? null,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        coefficient,
+        max_value,
+        students: studentList,
+      },
+    };
+  } catch {
+    return { error: "Impossible de charger la grille de notes." };
+  }
 }
 
 export async function fetchClassroomGradesAction(
   classroomId: string,
   subjectId: string,
   period: string,
-  type: "test" | "exam" | "homework" | "oral" | "practical",
+  type: string,
   establishmentId?: string
 ): Promise<ActionResult<GradeWithRelations[]>> {
   const authResult = await requireAuth("view");
@@ -54,84 +157,73 @@ export async function fetchClassroomGradesAction(
   try {
     const db = await getDb();
 
-    // 1. Fetch current academic year
-    const { data: currentYear } = await db
-      .from("academic_years")
-      .select("id")
-      .eq("establishment_id", estId)
-      .eq("is_current", true)
-      .maybeSingle();
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
 
-    if (!currentYear) return { error: "Aucune année académique active configurée." };
-
-    // 2. Fetch existing grades
-    const { data: existingGrades, error: gradesErr } = await db
-      .from("grades")
-      .select("*, student:students(id, student_number, user:users(name))")
-      .eq("establishment_id", estId)
-      .eq("classroom_id", classroomId)
-      .eq("subject_id", subjectId)
-      .eq("period", period)
-      .eq("type", type)
-      .eq("academic_year_id", currentYear.id);
-
-    if (gradesErr) return { error: gradesErr.message };
-
-    // If grades already exist, return them
-    if (existingGrades && existingGrades.length > 0) {
-      return { success: true, data: existingGrades as GradeWithRelations[] };
-    }
-
-    // 3. If no grades exist, load all students in the classroom to start fresh
-    const { data: classStudents, error: studentsErr } = await db
+    // 1. Fetch ALL students in this classroom
+    const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
       .eq("classroom_id", classroomId)
-      .eq("status", "active");
+      .order("student_number");
 
-    if (studentsErr) return { error: studentsErr.message };
+    if (studErr) return { error: studErr.message };
 
-    const initialGrades: GradeWithRelations[] = (classStudents ?? []).map((s: any) => ({
-      id: "", // no grade ID yet
-      establishment_id: estId,
-      student_id: s.id,
-      subject_id: subjectId,
-      classroom_id: classroomId,
-      academic_year_id: currentYear.id,
-      period,
-      value: 0, // start with 0 or fallback
-      max_value: 20,
-      coefficient: 1,
-      type,
-      comment: "",
-      graded_by: authResult.session!.user.id,
-      created_at: new Date().toISOString(),
-      student: {
-        id: s.id,
-        student_number: s.student_number,
-        user: {
-          name: s.user?.name || "Sans nom",
-        },
-      },
-    }));
+    // 2. Fetch existing grades for this tuple
+    const { data: existingGrades } = await db
+      .from("grades")
+      .select("*, student:students(id, student_number, user:users(name))")
+      .eq("classroom_id", classroomId)
+      .eq("subject_id", subjectId)
+      .eq("period", period)
+      .eq("type", type);
 
-    // Sort by student name
-    initialGrades.sort((a, b) => {
-      const nameA = a.student?.user?.name || "";
-      const nameB = b.student?.user?.name || "";
-      return nameA.localeCompare(nameB);
+    const gradeByStudent = new Map<string, GradeWithRelations>();
+    (existingGrades ?? []).forEach((g: any) => {
+      gradeByStudent.set(g.student_id, g as GradeWithRelations);
     });
 
-    return { success: true, data: initialGrades };
+    // 3. Combine to return ALL students in classroom (graded or draft)
+    const result: GradeWithRelations[] = (students ?? []).map((s: any) => {
+      const existingGrade = gradeByStudent.get(s.id);
+      if (existingGrade) return existingGrade;
+
+      // Draft entries use null value so they are NOT accidentally saved with 0
+      return {
+        id: `draft_${s.id}`,
+        establishment_id: estId,
+        student_id: s.id,
+        subject_id: subjectId,
+        classroom_id: classroomId,
+        academic_year_id: activeYearId ?? "",
+        period,
+        value: null,
+        max_value: 20,
+        coefficient: 1,
+        type: type as any,
+        comment: null,
+        graded_by: "",
+        created_at: new Date().toISOString(),
+        student: {
+          id: s.id,
+          student_number: s.student_number,
+          user: s.user,
+        },
+      } as any;
+    });
+
+    return { success: true, data: result };
   } catch {
-    return { error: "Erreur lors du chargement de la grille des notes." };
+    return { error: "Impossible de charger les élèves de la classe." };
   }
 }
 
-export async function saveGradesAction(
+/**
+ * Enregistre en masse les notes d'une évaluation pour toute une classe.
+ */
+export async function saveGradesBatchAction(
   values: SaveGradesInput
 ): Promise<ActionResult<void>> {
-  const authResult = await requireAuth("create"); // or edit
+  const authResult = await requireAuth("create");
   if (authResult.error) return { error: authResult.error };
 
   const validated = saveGradesSchema.safeParse(values);
@@ -139,99 +231,105 @@ export async function saveGradesAction(
     return { error: validated.error.issues[0]?.message ?? "Données invalides." };
   }
 
-  const estId = authResult.session!.user.establishment_id;
-  if (!estId) return { error: "Aucun établissement associé." };
+  const estId = await resolveEstablishmentId(
+    authResult.session!.user.establishment_id,
+    (validated.data as any).establishment_id
+  );
+  if (!estId) return { error: "Établissement requis." };
 
   try {
     const db = await getDb();
 
     // Fetch active academic year
-    const { data: currentYear } = await db
-      .from("academic_years")
-      .select("id")
-      .eq("establishment_id", estId)
-      .eq("is_current", true)
-      .maybeSingle();
-
-    if (!currentYear) return { error: "Aucune année académique active." };
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
+    if (!activeYearId) return { error: "Aucune année académique active." };
 
     const { classroom_id, subject_id, period, type, coefficient, max_value, grades } = validated.data;
     const userId = authResult.session!.user.id;
 
-    // Upsert each grade item
-    for (const item of grades) {
-      if (item.value < 0 || item.value > max_value) {
-        return { error: `La note pour l'élève doit être comprise entre 0 et ${max_value}.` };
-      }
+    // Filter valid non-null grades
+    const validGrades = (grades as any[]).filter((g: any) => (g.value !== null && g.value !== undefined) || (g.score !== null && g.score !== undefined));
 
-      // Check if grade already exists
+    for (const g of validGrades) {
+      const gradeVal = Number(g.value ?? g.score);
+      if (isNaN(gradeVal)) continue;
+
+      // Check if a grade record ALREADY EXISTS in DB for this student, classroom, subject, period, type
       const { data: existing } = await db
         .from("grades")
         .select("id")
-        .eq("establishment_id", estId)
         .eq("classroom_id", classroom_id)
         .eq("subject_id", subject_id)
-        .eq("student_id", item.student_id)
+        .eq("student_id", g.student_id)
         .eq("period", period)
         .eq("type", type)
-        .eq("academic_year_id", currentYear.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if (existing) {
-        // Update
+      const targetId = (g.grade_id && !g.grade_id.startsWith("draft_")) ? g.grade_id : existing?.id;
+
+      if (targetId) {
+        // Update existing grade
         const { error: updateErr } = await db
           .from("grades")
           .update({
-            value: item.value,
-            max_value,
+            value: gradeVal,
             coefficient,
-            comment: item.comment || null,
-            graded_by: userId,
+            max_value,
+            comment: g.comment || null,
           })
-          .eq("id", existing.id);
+          .eq("id", targetId);
 
-        if (updateErr) return { error: updateErr.message };
+        if (updateErr) {
+          return { error: updateErr.message };
+        }
       } else {
-        // Insert
-        const { error: insertErr } = await db
-          .from("grades")
-          .insert({
-            establishment_id: estId,
-            student_id: item.student_id,
-            subject_id,
-            classroom_id,
-            academic_year_id: currentYear.id,
-            period,
-            value: item.value,
-            max_value,
-            coefficient,
-            type,
-            comment: item.comment || null,
-            graded_by: userId,
-          });
+        const gradePayload: any = {
+          establishment_id: estId,
+          classroom_id,
+          subject_id,
+          student_id: g.student_id,
+          academic_year_id: activeYearId,
+          graded_by: userId,
+          period,
+          type,
+          value: gradeVal,
+          coefficient,
+          max_value,
+          comment: g.comment || null,
+        };
 
-        if (insertErr) return { error: insertErr.message };
+        const { error: insertErr } = await db.from("grades").insert(gradePayload);
+        if (insertErr) {
+          // Retry without graded_by if foreign key fails
+          const { error: retryErr } = await db.from("grades").insert({
+            ...gradePayload,
+            graded_by: null,
+          });
+          if (retryErr) return { error: retryErr.message };
+        }
       }
     }
 
     revalidatePath("/grades");
+    revalidatePath("/report-cards");
     return { success: true };
-  } catch {
-    return { error: "Erreur lors de l'enregistrement des notes." };
+  } catch (e: any) {
+    return { error: e?.message || "Erreur lors de la sauvegarde des notes." };
   }
 }
 
-// ========== AVERAGES ==========
+export const saveGradesAction = saveGradesBatchAction;
 
 /**
- * Calcule la moyenne pondérée d'un élève pour une période donnée
- * en appelant la fonction Postgres calculate_student_average()
+ * Calcule la moyenne générale par classe pour le tableau de bord des notes
  */
-export async function getStudentAverageAction(
-  studentId: string,
+export async function getClassroomOverallAveragesAction(
+  classroomId: string,
   period: string,
   establishmentId?: string
-): Promise<ActionResult<{ average: number | null; mention: string | null }>> {
+): Promise<ActionResult<{ classroomAverage: number | null; totalStudents: number }>> {
   const authResult = await requireAuth("view");
   if (authResult.error) return { error: authResult.error };
 
@@ -244,36 +342,33 @@ export async function getStudentAverageAction(
   try {
     const db = await getDb();
 
-    const { data: currentYear } = await db
-      .from("academic_years")
-      .select("id")
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
+    if (!activeYearId) return { error: "Aucune année académique active." };
+
+    const { data: grades, error: gradesErr } = await db
+      .from("grades")
+      .select("value, max_value, coefficient")
       .eq("establishment_id", estId)
-      .eq("is_current", true)
-      .maybeSingle();
+      .eq("classroom_id", classroomId)
+      .eq("academic_year_id", activeYearId)
+      .eq("period", period);
 
-    if (!currentYear) return { error: "Aucune année académique active." };
+    if (gradesErr) return { error: gradesErr.message };
 
-    const { data, error } = await db.rpc("calculate_student_average", {
-      p_student_id: studentId,
-      p_academic_year_id: currentYear.id,
-      p_period: period,
-    });
+    const { count: studentCount } = await db
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("classroom_id", classroomId)
+      .eq("status", "active");
 
-    if (error) return { error: error.message };
+    const classroomAverage = computeWeightedAverage(grades ?? []);
 
-    const average = data as number | null;
-    let mention: string | null = null;
-    if (average !== null) {
-      if (average >= 16) mention = "Très Bien";
-      else if (average >= 14) mention = "Bien";
-      else if (average >= 12) mention = "Assez Bien";
-      else if (average >= 10) mention = "Passable";
-      else mention = "Insuffisant";
-    }
-
-    return { success: true, data: { average, mention } };
+    return {
+      success: true,
+      data: { classroomAverage, totalStudents: studentCount ?? 0 },
+    };
   } catch {
-    return { error: "Erreur lors du calcul de la moyenne." };
+    return { error: "Impossible de calculer la moyenne de la classe." };
   }
 }
 
@@ -303,30 +398,47 @@ export async function getClassroomAveragesAction(
     authResult.session!.user.establishment_id,
     establishmentId
   );
-  if (!estId) return { error: "Établissement requis." };
 
   try {
     const db = await getDb();
 
-    const { data: currentYear } = await db
-      .from("academic_years")
-      .select("id")
-      .eq("establishment_id", estId)
-      .eq("is_current", true)
-      .maybeSingle();
-
-    if (!currentYear) return { error: "Aucune année académique active." };
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
+    if (!activeYearId) return { error: "Aucune année académique active." };
 
     // Fetch students in classroom
     const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
-      .eq("classroom_id", classroomId)
-      .eq("status", "active");
+      .eq("classroom_id", classroomId);
 
     if (studErr) return { error: studErr.message };
 
-    // Compute average for each student via Postgres function
+    // Fetch all grades for students in this classroom
+    const studentIds = (students ?? []).map((s: any) => s.id);
+    if (studentIds.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    let gradesQuery = db
+      .from("grades")
+      .select("student_id, value, max_value, coefficient, period")
+      .eq("classroom_id", classroomId)
+      .in("student_id", studentIds);
+
+    if (period && period !== "AN") {
+      gradesQuery = gradesQuery.eq("period", period);
+    }
+
+    const { data: gradesData, error: gradesErr } = await gradesQuery;
+    if (gradesErr) return { error: gradesErr.message };
+
+    const gradesByStudent = new Map<string, GradeForAverage[]>();
+    (gradesData ?? []).forEach((g: any) => {
+      const list = gradesByStudent.get(g.student_id) ?? [];
+      list.push({ value: g.value, max_value: g.max_value, coefficient: g.coefficient });
+      gradesByStudent.set(g.student_id, list);
+    });
+
     const results: Array<{
       student_id: string;
       student_number: string;
@@ -337,21 +449,9 @@ export async function getClassroomAveragesAction(
     }> = [];
 
     for (const s of students ?? []) {
-      const { data: avg } = await db.rpc("calculate_student_average", {
-        p_student_id: s.id,
-        p_academic_year_id: currentYear.id,
-        p_period: period,
-      });
-
-      const average = avg as number | null;
-      let mention: string | null = null;
-      if (average !== null) {
-        if (average >= 16) mention = "Très Bien";
-        else if (average >= 14) mention = "Bien";
-        else if (average >= 12) mention = "Assez Bien";
-        else if (average >= 10) mention = "Passable";
-        else mention = "Insuffisant";
-      }
+      const studentGrades = gradesByStudent.get(s.id) ?? [];
+      const average = computeWeightedAverage(studentGrades);
+      const mention = averageToMention(average);
 
       results.push({
         student_id: s.id,
@@ -359,7 +459,7 @@ export async function getClassroomAveragesAction(
         student_name: (s.user as any)?.name ?? "Sans nom",
         average,
         mention,
-        rank: null, // will be computed after sorting
+        rank: null,
       });
     }
 
@@ -392,9 +492,17 @@ export async function deleteGradeAction(
 
   try {
     const db = await getDb();
+
+    const guard = await assertEstablishmentOwnership(
+      db, "grades", gradeId, authResult.session!.user.establishment_id,
+      "Note introuvable.", "Vous n'avez pas accès à cette note."
+    );
+    if ("error" in guard) return { error: guard.error };
+
     const { error } = await db.from("grades").delete().eq("id", gradeId);
     if (error) return { error: error.message };
     revalidatePath("/grades");
+    revalidatePath("/report-cards");
     return { success: true };
   } catch {
     return { error: "Erreur lors de la suppression de la note." };
@@ -424,97 +532,100 @@ export async function getStudentReportCardDetailsAction(
     authResult.session!.user.establishment_id,
     establishmentId
   );
-  if (!estId) return { error: "Établissement requis." };
 
   try {
     const db = await getDb();
 
-    const { data: currentYear } = await db
-      .from("academic_years")
+    const activeYearId = await resolveActiveAcademicYearId(db, estId);
+    if (!activeYearId) return { error: "Aucune année académique active." };
+
+    // 1. Fetch all students in this classroom (for classMin/classMax)
+    const { data: classroomStudents } = await db
+      .from("students")
       .select("id")
-      .eq("establishment_id", estId)
-      .eq("is_current", true)
-      .maybeSingle();
+      .eq("classroom_id", classroomId);
 
-    if (!currentYear) return { error: "Aucune année académique active." };
+    const studentIds = (classroomStudents ?? []).map((s: any) => s.id);
+    if (!studentIds.includes(studentId)) studentIds.push(studentId);
 
+    // 2. Fetch all grades for this classroom & period
+    let gradesQuery = db
+      .from("grades")
+      .select("student_id, subject_id, value, max_value, coefficient, period")
+      .eq("classroom_id", classroomId)
+      .in("student_id", studentIds);
+
+    if (period && period !== "AN") {
+      gradesQuery = gradesQuery.eq("period", period);
+    }
+
+    const { data: classroomGrades, error: gradesErr } = await gradesQuery;
+    if (gradesErr) return { error: gradesErr.message };
+
+    const grades = classroomGrades ?? [];
+
+    // 3. Get unique subject IDs from the actual grades
+    const subjectIdsInGrades = [...new Set(grades.map((g: any) => g.subject_id))];
+
+    if (subjectIdsInGrades.length === 0) {
+      // No grades recorded yet for this classroom/period
+      return { success: true, data: [] };
+    }
+
+    // 4. Fetch subject details for those subjects only
     const { data: subjectsData } = await db
       .from("subjects")
       .select("id, name, coefficient")
-      .eq("establishment_id", estId)
+      .in("id", subjectIdsInGrades)
       .order("name");
 
     const subjects = subjectsData ?? [];
 
-    const { data: classroomGrades } = await db
-      .from("grades")
-      .select("student_id, subject_id, grade_value, coefficient")
-      .eq("establishment_id", estId)
-      .eq("classroom_id", classroomId)
-      .eq("period", period)
-      .eq("academic_year_id", currentYear.id);
-
-    const grades = classroomGrades ?? [];
-
-    const defaultSubjects = [
-      { id: "math", name: "Mathématiques", coefficient: 4 },
-      { id: "pc", name: "Physique-Chimie", coefficient: 3 },
-      { id: "fr", name: "Français", coefficient: 3 },
-      { id: "ang", name: "Anglais", coefficient: 2 },
-      { id: "hg", name: "Histoire-Géographie", coefficient: 2 },
-      { id: "svt", name: "SVT", coefficient: 2 },
-      { id: "eps", name: "EPS", coefficient: 1 },
-    ];
-
-    const subjectsToProcess = subjects.length > 0 ? subjects : defaultSubjects;
-
-    const reportMatrix: StudentSubjectReport[] = subjectsToProcess.map((sub: any) => {
+    // 5. Build the report per subject
+    const report: StudentSubjectReport[] = subjects.map((sub: any) => {
       const subGrades = grades.filter((g: any) => g.subject_id === sub.id);
+      const studentSubGrades = subGrades.filter((g: any) => g.student_id === studentId);
 
-      const studentAvgMap: Record<string, { totalPoints: number; totalCoef: number }> = {};
+      // Weighted average for this student in this subject
+      const studentAvg = computeWeightedAverage(studentSubGrades as GradeForAverage[]);
+
+      // Per-student averages in this subject (for classMin / classMax)
+      const averagesByStudent = new Map<string, number[]>();
       subGrades.forEach((g: any) => {
-        const coef = g.coefficient || sub.coefficient || 1;
-        if (!studentAvgMap[g.student_id]) {
-          studentAvgMap[g.student_id] = { totalPoints: 0, totalCoef: 0 };
+        const val = g.value;
+        if (val !== null && val !== undefined && !isNaN(Number(val))) {
+          const list = averagesByStudent.get(g.student_id) ?? [];
+          list.push((Number(val) / (g.max_value || 20)) * 20);
+          averagesByStudent.set(g.student_id, list);
         }
-        studentAvgMap[g.student_id].totalPoints += Number(g.grade_value) * coef;
-        studentAvgMap[g.student_id].totalCoef += coef;
       });
 
-      const averagesList: number[] = Object.values(studentAvgMap)
-        .map((calc) => (calc.totalCoef > 0 ? Math.round((calc.totalPoints / calc.totalCoef) * 10) / 10 : null))
-        .filter((val): val is number => val !== null);
+      const studentAverages: number[] = [];
+      averagesByStudent.forEach((scores) => {
+        if (scores.length > 0) {
+          const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+          studentAverages.push(Number(avg.toFixed(2)));
+        }
+      });
 
-      const targetStudentCalc = studentAvgMap[studentId];
-      const targetStudentAvg = targetStudentCalc && targetStudentCalc.totalCoef > 0
-        ? Math.round((targetStudentCalc.totalPoints / targetStudentCalc.totalCoef) * 10) / 10
-        : null;
+      const classMin = studentAverages.length > 0 ? Math.min(...studentAverages) : null;
+      const classMax = studentAverages.length > 0 ? Math.max(...studentAverages) : null;
 
-      const classMin = averagesList.length > 0 ? Math.min(...averagesList) : null;
-      const classMax = averagesList.length > 0 ? Math.max(...averagesList) : null;
-
-      let appreciation = "Sans évaluation";
-      if (targetStudentAvg !== null) {
-        if (targetStudentAvg >= 16) appreciation = "Très bon travail. Régulier.";
-        else if (targetStudentAvg >= 14) appreciation = "Bon travail. Poursuivez ainsi.";
-        else if (targetStudentAvg >= 12) appreciation = "Ensemble satisfaisant.";
-        else if (targetStudentAvg >= 10) appreciation = "Résultats passables. Des efforts requis.";
-        else appreciation = "Résultats insuffisants. Travail à renforcer.";
-      }
+      const appreciation = averageToAppreciation(studentAvg);
 
       return {
         subject_id: sub.id,
         subject: sub.name,
-        coef: sub.coefficient || 1,
-        average: targetStudentAvg,
+        coef: sub.coefficient ?? 1,
+        average: studentAvg,
         classMin,
         classMax,
         appreciation,
       };
     });
 
-    return { success: true, data: reportMatrix };
+    return { success: true, data: report };
   } catch {
-    return { error: "Erreur lors du chargement des détails du bulletin." };
+    return { error: "Erreur lors du chargement du bulletin détaillé." };
   }
 }

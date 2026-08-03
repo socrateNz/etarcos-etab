@@ -22,7 +22,7 @@ export const useSidebarStore = create<SidebarStore>()(
       isOpen: true,
       isCollapsed: false,
       activeModule: null,
-      expandedGroups: ["overview", "academic", "students"],
+      expandedGroups: ["overview", "academic", "students", "financial", "administration", "resources", "reports", "system"],
 
       setIsOpen: (open) => set({ isOpen: open }),
       toggleSidebar: () => set((state) => ({ isOpen: !state.isOpen })),

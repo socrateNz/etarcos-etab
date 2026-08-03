@@ -29,6 +29,8 @@ export * as disciplineFeature from "./discipline";
 export * as libraryFeature from "./library";
 export * as inventoryFeature from "./inventory";
 export * as newsFeature from "./news";
+export * as documentsFeature from "./documents";
+export * as diplomasFeature from "./diplomas";
 
 
 

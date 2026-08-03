@@ -197,7 +197,7 @@ export function CyclesPage() {
                   setLevelFormOpen(true);
                 }
               }}
-              className="gap-2 bg-brand-500 hover:bg-brand-600 text-white sm:self-end"
+              className="gap-2 bg-brand-500 hover:bg-brand-600 text-slate-950 dark:text-white font-semibold sm:self-end"
             >
               <Plus className="size-4" />
               {tab === "cycles" ? "Nouveau cycle" : "Nouveau niveau"}
@@ -305,6 +305,7 @@ export function CyclesPage() {
           } else {
             await createCycle.mutateAsync(values as CreateCycleInput);
           }
+          await refetchCycles();
           setCycleFormOpen(false);
           setEditingCycle(null);
         }}
@@ -325,6 +326,7 @@ export function CyclesPage() {
           } else {
             await createLevel.mutateAsync(values as CreateLevelInput);
           }
+          await refetchLevels();
           setLevelFormOpen(false);
           setEditingLevel(null);
         }}

@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users, Plus, FileSpreadsheet, Printer } from "lucide-react";
+import { Users, Plus, FileSpreadsheet, Printer, KeyRound, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePermissions } from "@/hooks/use-permissions";
 import { exportToCSV, exportToPDF } from "@/utils/export";
+import { resetUserPasswordAction } from "@/features/users/actions";
 import {
   useStaff,
   useCreateStaff,
@@ -34,6 +36,11 @@ export function StaffPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMemberWithUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMemberWithUser | null>(null);
+
+  // Reset password states
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -60,6 +67,25 @@ export function StaffPage() {
 
   const staffList = staffData?.data ?? [];
 
+  const handleResetPassword = async (row: StaffMemberWithUser) => {
+    if (!row.user?.id) return;
+    setResettingId(row.user.id);
+    const res = await resetUserPasswordAction(row.user.id);
+    if (res.success && res.data) {
+      setResetResult(res.data);
+      refetch();
+    }
+    setResettingId(null);
+  };
+
+  const handleCopyCredentials = () => {
+    if (!resetResult) return;
+    const text = `Identifiants pour ${resetResult.name} :\nEmail : ${resetResult.email}\nMot de passe temporaire : ${resetResult.tempPassword}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const columns = useMemo(
     () =>
       getStaffColumns({
@@ -68,6 +94,7 @@ export function StaffPage() {
           setFormOpen(true);
         },
         onDelete: setDeleteTarget,
+        onResetPassword: handleResetPassword,
         canEdit,
         canDelete,
       }),
@@ -127,7 +154,7 @@ export function StaffPage() {
                 setEditingStaff(null);
                 setFormOpen(true);
               }}
-              className="gap-2 bg-brand-500 hover:bg-brand-600 text-white"
+              className="gap-2 bg-brand-500 hover:bg-brand-600 text-slate-950 dark:text-white font-semibold"
             >
               <Plus className="size-4" />
               Recruter un personnel
@@ -170,6 +197,50 @@ export function StaffPage() {
         }}
         isLoading={createStaff.isPending || updateStaff.isPending}
       />
+
+      {/* Reset Credentials Result Modal */}
+      <Dialog open={!!resetResult} onOpenChange={(open) => !open && setResetResult(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-indigo-500" />
+              Nouveau Mot de Passe Temporaire
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Un mot de passe temporaire a été généré pour {resetResult?.name}. Transmettez-le à l'employé.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetResult && (
+            <div className="space-y-4 pt-2">
+              <div className="p-3 bg-muted/50 rounded-lg border border-border space-y-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground font-medium">Identifiant (Email) :</span>
+                  <p className="font-bold text-foreground font-mono mt-0.5">{resetResult.email}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground font-medium">Mot de passe temporaire :</span>
+                  <p className="font-bold text-primary font-mono text-sm mt-0.5">{resetResult.tempPassword}</p>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px]">
+                ℹ️ Cette option disparaîtra automatiquement dès que {resetResult.name} se sera connecté et aura modifié ce mot de passe.
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button onClick={handleCopyCredentials} variant="outline" className="flex-1 gap-2 text-xs">
+                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Copié dans le presse-papier !" : "Copier les identifiants"}
+                </Button>
+                <Button onClick={() => setResetResult(null)} size="sm">
+                  Fermer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!deleteTarget}

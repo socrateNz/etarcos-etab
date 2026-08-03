@@ -254,17 +254,19 @@ export function PaymentsPage() {
 
         <div className="flex gap-2">
           {activeTab === "journal" && canCreate && (
-            <Button
-              onClick={() => setPaymentFormOpen(true)}
-              className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white"
-            >
-              <Plus className="size-4" /> Enregistrer un versement
-            </Button>
+            <>
+              <Button
+                onClick={() => setPaymentFormOpen(true)}
+                className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 dark:text-white font-semibold"
+              >
+                <Plus className="size-4" /> Enregistrer un versement
+              </Button>
+            </>
           )}
           {activeTab === "tarifs" && canCreate && (
             <Button
               onClick={() => setFeeFormOpen(true)}
-              className="gap-2 bg-brand-500 hover:bg-brand-600 text-white"
+              className="gap-2 bg-brand-500 hover:bg-brand-600 text-slate-950 dark:text-white font-semibold"
             >
               <Plus className="size-4" /> Nouvelle catégorie
             </Button>
