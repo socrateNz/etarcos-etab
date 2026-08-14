@@ -2,6 +2,8 @@
 
 import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateTemporaryPassword } from "@/lib/auth/password";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -41,8 +43,8 @@ async function requireAuth(action: CrudAction) {
 
 
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== STAFF MEMBERS ==========

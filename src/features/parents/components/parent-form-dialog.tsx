@@ -43,7 +43,7 @@ export function ParentFormDialog({
   isLoading = false,
 }: ParentFormDialogProps) {
   const isEdit = !!parent;
-  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 200 });
+  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 100 });
   const allStudents = studentsData?.data ?? [];
 
   const [linkedStudents, setLinkedStudents] = useState<{ id: string; name: string }[]>([]);

@@ -31,7 +31,13 @@ export async function createClient() {
   );
 }
 
-// Client avec Service Role pour les Server Actions admin
+// Client avec Service Role pour les Server Actions admin.
+// NOTE: ce client bypasse RLS entièrement — la sécurité tenant/permissions
+// repose sur la couche applicative (requireAuth/resolveEstablishmentId/
+// assertEstablishmentOwnership), pas sur les policies RLS de la base
+// (qui existent mais ne sont jamais exercées, faute de session Supabase Auth
+// réelle — NextAuth gère sa propre session JWT). Détails et pistes pour
+// bridger ça proprement plus tard : voir docs/RLS_ARCHITECTURE.md.
 export async function createAdminClient() {
   const cookieStore = await cookies();
 

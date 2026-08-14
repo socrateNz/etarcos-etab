@@ -469,7 +469,7 @@ export async function forceUpdatePasswordAction(newPassword: string) {
     if (error) throw new Error(error.message);
 
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }

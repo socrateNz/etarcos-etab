@@ -55,8 +55,8 @@ export default function DashboardLayout({
         await update();
         await signOut({ callbackUrl: "/login" });
       }
-    } catch (err: any) {
-      toast.error("Erreur inattendue", { description: err.message });
+    } catch (err) {
+      toast.error("Erreur inattendue", { description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUpdating(false);
     }

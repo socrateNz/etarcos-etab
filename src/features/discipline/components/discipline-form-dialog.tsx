@@ -43,7 +43,7 @@ export function DisciplineFormDialog({
   isLoading = false,
 }: DisciplineFormDialogProps) {
   const isEdit = !!record;
-  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 200 });
+  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 100 });
   const students = studentsData?.data ?? [];
 
   const {

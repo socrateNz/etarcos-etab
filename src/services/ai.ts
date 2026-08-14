@@ -74,14 +74,14 @@ export class GeminiService {
           timestamp: new Date().toISOString(),
         },
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         message: {
           role: "model",
           content: "Désolé, une erreur est survenue lors de la communication avec l'assistant IA.",
           timestamp: new Date().toISOString(),
         },
-        error: error.message,
+        error: error instanceof Error ? error.message : "Erreur inattendue.",
       };
     }
   }

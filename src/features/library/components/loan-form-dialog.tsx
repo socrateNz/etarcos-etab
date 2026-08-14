@@ -34,7 +34,7 @@ export function LoanFormDialog({ open, book, onClose, onSubmit, isLoading = fals
     .toISOString()
     .split("T")[0];
 
-  const { data: studentsData } = useStudents({ per_page: 300 });
+  const { data: studentsData } = useStudents({ per_page: 100 });
   const students = studentsData?.data ?? [];
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateLoanInput>({

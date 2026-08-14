@@ -1,6 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 import { revalidatePath } from "next/cache";
@@ -21,8 +23,8 @@ export interface AcademicYearItem {
   created_at: string;
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 export async function listAcademicYearsAction(

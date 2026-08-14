@@ -1,6 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateTemporaryPassword } from "@/lib/auth/password";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -14,8 +16,8 @@ async function requireSuperAdmin() {
   return session;
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== OWNERS ==========
@@ -31,8 +33,8 @@ export async function listOwnersAction() {
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -105,8 +107,8 @@ export async function createOwnerAction(values: { name: string; email: string; p
 
     revalidatePath("/owners");
     return { success: true, data: { ...ownerProfile, password } };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -135,8 +137,8 @@ export async function deleteOwnerAction(id: string) {
 
     revalidatePath("/owners");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -153,8 +155,8 @@ export async function listUsersAction() {
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -162,16 +164,18 @@ export async function updateUserStatusAction(id: string, status: string) {
   await requireSuperAdmin();
   try {
     const db = await getDb();
+    // The `users` table has no `status` column — "active"/"suspended" is a
+    // derived label (see listUsersScopedAction) backed by `is_active`.
     const { error } = await db
       .from("users")
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ is_active: status === "active", updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (error) throw new Error(error.message);
     revalidatePath("/users");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -183,8 +187,8 @@ export async function deleteUserAction(id: string) {
     if (error) throw new Error(error.message);
     revalidatePath("/users");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -201,8 +205,8 @@ export async function listEstablishmentPlans() {
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -212,14 +216,14 @@ export async function updateEstablishmentPlan(id: string, plan: string) {
     const db = await getDb();
     const { error } = await db
       .from("establishments")
-      .update({ plan, updated_at: new Date().toISOString() })
+      .update({ plan: plan as Database["public"]["Enums"]["establishment_plan"], updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (error) throw new Error(error.message);
     revalidatePath("/settings");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -243,8 +247,8 @@ export async function listNotificationsAction() {
 
     if (error) throw new Error(error.message);
     return { data: data ?? [] };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -276,8 +280,8 @@ export async function createSystemNotificationAction(values: {
 
     revalidatePath("/notifications");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -293,8 +297,8 @@ export async function listAuditLogsAction() {
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -311,8 +315,8 @@ export async function listOwnerLinksAction(ownerId: string) {
 
     if (error) throw new Error(error.message);
     return { data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -329,7 +333,7 @@ export async function associateOwnerAction(
       .upsert({
         owner_id: ownerId,
         establishment_id: establishmentId,
-        role,
+        role: role as Database["public"]["Enums"]["owner_role"],
       })
       .select()
       .single();
@@ -337,8 +341,8 @@ export async function associateOwnerAction(
     if (error) throw new Error(error.message);
     revalidatePath("/owners");
     return { success: true, data };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -355,7 +359,7 @@ export async function dissociateOwnerAction(ownerId: string, establishmentId: st
     if (error) throw new Error(error.message);
     revalidatePath("/owners");
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }

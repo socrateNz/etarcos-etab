@@ -3,6 +3,8 @@
 import { resolveEstablishmentId } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
@@ -107,8 +109,8 @@ async function requireAuth(action: CrudAction) {
   return { session };
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== ACTIONS ==========
@@ -667,7 +669,7 @@ export async function getAttendanceLogsAction(input: {
       query = query.eq("subject_id", input.subjectId);
     }
     if (input.status && input.status !== "all") {
-      query = query.eq("status", input.status);
+      query = query.eq("status", input.status as Database["public"]["Enums"]["attendance_status"]);
     }
     if (input.dateFrom) {
       query = query.gte("date", input.dateFrom);

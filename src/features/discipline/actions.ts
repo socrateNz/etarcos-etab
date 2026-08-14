@@ -3,6 +3,8 @@
 import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
@@ -40,8 +42,8 @@ async function requireAuth(action: CrudAction) {
 
 
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== ACTIONS ==========
@@ -65,7 +67,7 @@ export async function listDisciplineRecords(
     const db = await getDb();
     let query = db
       .from("discipline_records")
-      .select("*, student:students(id, student_number, user:users(name), classroom:classrooms(id, name)), recorder:users(id, name)", { count: "exact" });
+      .select("*, student:students(id, student_number, user:users(name), classroom:classrooms(id, name)), recorder:users!recorded_by(id, name)", { count: "exact" });
 
     if (estId) query = query.eq("establishment_id", estId);
     if (student_id) query = query.eq("student_id", student_id);

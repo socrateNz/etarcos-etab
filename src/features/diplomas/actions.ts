@@ -4,6 +4,8 @@ import { randomBytes } from "crypto";
 import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 import { resolveActiveAcademicYearId } from "@/app/actions/academic-years";
 import { auth } from "@/lib/auth/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { createAdminClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/types/permissions";
 import type { SystemRole } from "@/types/auth";
@@ -32,8 +34,8 @@ async function requireAuth(action: CrudAction) {
   return { session };
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 function generateSerialNumber(): string {

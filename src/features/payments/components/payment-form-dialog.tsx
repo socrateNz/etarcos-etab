@@ -37,7 +37,7 @@ export function PaymentFormDialog({
   onSubmit,
   isLoading = false,
 }: PaymentFormDialogProps) {
-  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 200 });
+  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 100 });
   const { data: categories = [], isLoading: loadingCategories } = useFeeCategories();
 
   const students = studentsData?.data ?? [];

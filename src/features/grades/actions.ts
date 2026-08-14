@@ -1,5 +1,7 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 import { computeWeightedAverage, averageToMention, averageToAppreciation, type GradeForAverage } from "./calculations";
 import { resolveActiveAcademicYearId } from "@/app/actions/academic-years";
@@ -30,8 +32,8 @@ async function requireAuth(action: CrudAction) {
   return { session };
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== ACTIONS ==========
@@ -104,7 +106,7 @@ export async function getGradesMatrixAction(
       .eq("subject_id", subjectId)
       .eq("academic_year_id", activeYearId)
       .eq("period", period)
-      .eq("type", type);
+      .eq("type", type as Database["public"]["Enums"]["grade_type"]);
 
     const gradeByStudent = new Map<string, any>();
     let max_value = 20;
@@ -175,7 +177,7 @@ export async function fetchClassroomGradesAction(
       .eq("classroom_id", classroomId)
       .eq("subject_id", subjectId)
       .eq("period", period)
-      .eq("type", type);
+      .eq("type", type as Database["public"]["Enums"]["grade_type"]);
 
     const gradeByStudent = new Map<string, GradeWithRelations>();
     (existingGrades ?? []).forEach((g: any) => {
@@ -315,8 +317,8 @@ export async function saveGradesBatchAction(
     revalidatePath("/grades");
     revalidatePath("/report-cards");
     return { success: true };
-  } catch (e: any) {
-    return { error: e?.message || "Erreur lors de la sauvegarde des notes." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erreur lors de la sauvegarde des notes." };
   }
 }
 

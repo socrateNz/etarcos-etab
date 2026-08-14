@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       default:
         return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
     }
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ error: "Format de requête invalide" }, { status: 400 });
   }
 }

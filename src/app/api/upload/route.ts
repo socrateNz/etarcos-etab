@@ -42,8 +42,8 @@ export async function POST(req: Request) {
       success: true,
       url: uploadResponse.secure_url,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Erreur d'upload Cloudinary:", error);
-    return NextResponse.json({ error: error.message || "Erreur de téléversement" }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur de téléversement" }, { status: 500 });
   }
 }

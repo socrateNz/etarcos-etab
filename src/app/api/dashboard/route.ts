@@ -145,7 +145,7 @@ export async function GET() {
       monthlyRevenue: monthlyData,
       classPerformance: classPerformance
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
   }
 }

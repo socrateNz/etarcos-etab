@@ -35,8 +35,8 @@ export async function GET(
         notes: data.notes,
       }
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
   }
 }
 
@@ -64,8 +64,8 @@ export async function PUT(
 
     if (error) throw error;
     return NextResponse.json({ success: true, data });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
   }
 }
 
@@ -88,7 +88,7 @@ export async function DELETE(
 
     if (error) throw error;
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
   }
 }

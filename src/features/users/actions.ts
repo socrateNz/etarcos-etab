@@ -1,5 +1,7 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateTemporaryPassword } from "@/lib/auth/password";
@@ -25,8 +27,8 @@ async function requireAuth(action: CrudAction) {
   return { session };
 }
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 export interface CreateUserInput {
@@ -54,8 +56,8 @@ export async function listOwnerEstablishmentsAction() {
         slug: e.slug,
       })),
     };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -102,8 +104,8 @@ export async function listUsersScopedAction() {
     });
 
     return { data: formatted };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -229,13 +231,17 @@ export async function createUserScopedAction(values: CreateUserInput) {
     const staffRoles = ["director", "censor", "accountant", "teacher", "secretary", "librarian", "lab_manager"];
     if (staffRoles.includes(values.role)) {
       const empNumber = "EMP-" + Math.floor(10000 + Math.random() * 90000);
-      await db.from("staff_members").insert({
+      const { error: staffError } = await db.from("staff_members").insert({
         user_id: userId,
         establishment_id: values.establishment_id,
         employee_number: empNumber,
         position: values.position || values.role,
+        hire_date: new Date().toISOString().split("T")[0],
         status: "active",
       });
+      if (staffError) {
+        return { error: `Utilisateur créé mais échec de la fiche employé : ${staffError.message}` };
+      }
     }
 
     await sendWelcomeEmail({ email: emailLower, name: values.name, tempPassword: password });
@@ -243,8 +249,8 @@ export async function createUserScopedAction(values: CreateUserInput) {
     revalidatePath("/users");
     revalidatePath("/staff");
     return { success: true, data: { userId, password } };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -278,7 +284,7 @@ export async function resetUserPasswordAction(targetUserId: string) {
         .eq("user_id", session.user.id)
         .maybeSingle();
 
-      const { data: link } = ownerProfile
+      const { data: link } = ownerProfile && targetUser.establishment_id
         ? await db
             .from("establishment_owners")
             .select("establishment_id")
@@ -325,8 +331,8 @@ export async function resetUserPasswordAction(targetUserId: string) {
         tempPassword: newTempPassword,
       },
     };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -353,8 +359,8 @@ export async function completePasswordChangeAction(newPassword: string) {
       .eq("id", session.user.id);
 
     return { success: true };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }
 
@@ -430,7 +436,7 @@ export async function repairUserRolesAction() {
     revalidatePath("/staff");
 
     return { success: true, repairedCount };
-  } catch (err: any) {
-    return { error: err.message };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }
 }

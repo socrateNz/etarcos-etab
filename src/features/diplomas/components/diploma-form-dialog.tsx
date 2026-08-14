@@ -26,7 +26,7 @@ interface DiplomaFormDialogProps {
 }
 
 export function DiplomaFormDialog({ open, onOpenChange, onSubmit, isLoading = false }: DiplomaFormDialogProps) {
-  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 200, status: "active" });
+  const { data: studentsData, isLoading: loadingStudents } = useStudents({ per_page: 100, status: "active" });
   const students = studentsData?.data ?? [];
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateDiplomaInput>({

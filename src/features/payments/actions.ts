@@ -1,5 +1,7 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
 import { computePaymentStatus } from "./calculations";
 
@@ -44,8 +46,8 @@ async function requireAuth(action: CrudAction) {
 
 
 
-async function getDb() {
-  return (await createAdminClient()) as any;
+async function getDb(): Promise<SupabaseClient<Database>> {
+  return (await createAdminClient()) as unknown as SupabaseClient<Database>;
 }
 
 // ========== FEE CATEGORIES ==========
