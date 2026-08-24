@@ -11,6 +11,7 @@ export const createStudentSchema = z.object({
   gender: z.enum(["male", "female", "other"]).optional().nullable(),
   date_of_birth: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
+  avatar_url: z.string().optional().nullable(),
 
   // Student specific fields
   student_number: z.string().min(1, "Numéro matricule requis").max(30),

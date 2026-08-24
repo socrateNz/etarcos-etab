@@ -195,6 +195,13 @@ export const navigationConfig: NavSection[] = [
         moduleKey: "diplomas",
         action: "view",
       },
+      {
+        title: "Cartes scolaires",
+        href: "/id-cards",
+        icon: "IdCard",
+        moduleKey: "id_cards",
+        action: "view",
+      },
     ],
   },
   {

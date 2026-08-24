@@ -190,6 +190,7 @@ export async function createStudentAction(
       gender: validated.data.gender || null,
       date_of_birth: validated.data.date_of_birth || null,
       address: validated.data.address || null,
+      avatar_url: validated.data.avatar_url || null,
       establishment_id: estId,
       is_active: validated.data.status === "active",
     });
@@ -297,6 +298,7 @@ export async function updateStudentAction(
     if (validated.data.gender !== undefined) userPayload.gender = validated.data.gender;
     if (validated.data.date_of_birth !== undefined) userPayload.date_of_birth = validated.data.date_of_birth;
     if (validated.data.address !== undefined) userPayload.address = validated.data.address;
+    if (validated.data.avatar_url !== undefined) userPayload.avatar_url = validated.data.avatar_url;
     if (validated.data.status) userPayload.is_active = validated.data.status === "active";
 
     if (Object.keys(userPayload).length > 0) {

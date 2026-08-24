@@ -517,6 +517,39 @@ export interface Diploma {
   academic_year?: { id: string; name: string } | null;
 }
 
+export interface IdCard {
+  id: string;
+  establishment_id: string;
+  student_id: string;
+  academic_year_id: string;
+  serial_number: string;
+  issue_date: string;
+  expiry_date: string | null;
+  created_at: string;
+  // Relations
+  student?: {
+    id: string;
+    student_number: string;
+    user?: {
+      id: string;
+      name: string;
+      avatar_url: string | null;
+      date_of_birth: string | null;
+      gender: Gender | null;
+    } | null;
+    classroom?: { id: string; name: string } | null;
+  } | null;
+  academic_year?: { id: string; name: string } | null;
+  establishment?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+    address: string | null;
+    city: string | null;
+    phone: string | null;
+  } | null;
+}
+
 // ============================================
 // AUDIT
 // ============================================

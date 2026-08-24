@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { Camera, Loader2, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getInitials } from "@/lib/utils";
-import { toast } from "sonner";
+import { useAvatarUpload } from "@/hooks/use-avatar-upload";
 
 interface AvatarUploadProps {
   value?: string | null;
@@ -22,74 +21,11 @@ export function AvatarUpload({
   className,
   disabled = false,
 }: AvatarUploadProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check size limit (e.g. 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Fichier trop volumineux", {
-        description: "L'image ne doit pas dépasser 2 Mo.",
-      });
-      return;
-    }
-
-    // Check file type
-    if (!file.type.startsWith("image/")) {
-      toast.error("Type de fichier non supporté", {
-        description: "Veuillez sélectionner un fichier image.",
-      });
-      return;
-    }
-
-    setIsUploading(true);
-
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        try {
-          const res = await fetch("/api/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file: base64String }),
-          });
-          const json = await res.json();
-          if (json.success && json.url) {
-            onChange(json.url);
-            toast.success("Image mise à jour");
-          } else {
-            toast.error(json.error || "Erreur de téléversement");
-          }
-        } catch {
-          toast.error("Erreur de connexion lors de l'envoi");
-        } finally {
-          setIsUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch {
-      toast.error("Erreur lors du traitement de l'image");
-      setIsUploading(false);
-    }
-  };
-
-  const handleRemove = () => {
-    onChange(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
+  const { fileInputRef, isUploading, handleUploadClick, handleFileChange, handleRemove } =
+    useAvatarUpload(onChange);
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-4">
+    <div className={`flex flex-col sm:flex-row items-center gap-4 ${className ?? ""}`}>
       <div className="relative group">
         <Avatar className="w-20 h-20 border border-border">
           <AvatarImage src={value || undefined} alt={name} />

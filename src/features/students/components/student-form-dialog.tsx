@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AvatarUpload } from "@/components/common/avatar-upload";
 import { useClassrooms } from "@/features/classrooms";
 import { useTrackOptions } from "@/features/tracks";
 import {
@@ -53,6 +54,8 @@ export function StudentFormDialog({
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(isEdit ? updateStudentSchema : createStudentSchema) as never,
@@ -65,6 +68,7 @@ export function StudentFormDialog({
       gender: "male",
       date_of_birth: "",
       address: "",
+      avatar_url: "",
       student_number: "",
       classroom_id: null,
       track_id: null,
@@ -86,6 +90,7 @@ export function StudentFormDialog({
           gender: student.user?.gender || "male",
           date_of_birth: student.user?.date_of_birth || "",
           address: student.user?.address || "",
+          avatar_url: student.user?.avatar_url || "",
           student_number: student.student_number,
           classroom_id: student.classroom_id ?? null,
           track_id: student.track_id ?? null,
@@ -103,6 +108,7 @@ export function StudentFormDialog({
           gender: "male",
           date_of_birth: "",
           address: "",
+          avatar_url: "",
           student_number: "",
           classroom_id: null,
           track_id: null,
@@ -138,6 +144,12 @@ export function StudentFormDialog({
           className="space-y-4"
         >
           <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider border-b pb-1">Identité de l'élève</p>
+
+          <AvatarUpload
+            value={watch("avatar_url")}
+            onChange={(url) => setValue("avatar_url", url)}
+            name={watch("name") || "Élève"}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

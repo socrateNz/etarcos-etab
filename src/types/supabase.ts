@@ -421,6 +421,61 @@ export type Database = {
           },
         ]
       }
+      id_cards: {
+        Row: {
+          academic_year_id: string
+          created_at: string
+          establishment_id: string
+          expiry_date: string | null
+          id: string
+          issue_date: string
+          serial_number: string
+          student_id: string
+        }
+        Insert: {
+          academic_year_id: string
+          created_at?: string
+          establishment_id: string
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string
+          serial_number: string
+          student_id: string
+        }
+        Update: {
+          academic_year_id?: string
+          created_at?: string
+          establishment_id?: string
+          expiry_date?: string | null
+          id?: string
+          issue_date?: string
+          serial_number?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "id_cards_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "id_cards_establishment_id_fkey"
+            columns: ["establishment_id"]
+            isOneToOne: false
+            referencedRelation: "establishments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "id_cards_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discipline_records: {
         Row: {
           academic_year_id: string

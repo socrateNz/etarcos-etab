@@ -293,6 +293,18 @@ export const MODULES: ModuleConfig[] = [
     actions: ["view", "create", "print"],
     isImplemented: true,
   },
+  {
+    key: "id_cards",
+    label: "Cartes scolaires",
+    description: "Cartes d'identité des élèves",
+    icon: "IdCard",
+    path: "/id-cards",
+    group: "administration",
+    roles: ["super_admin", "director", "censor", "secretary"],
+    actions: ["view", "create", "print"],
+    isImplemented: true,
+    isNew: true,
+  },
 
   // ========== RESOURCES ==========
   {

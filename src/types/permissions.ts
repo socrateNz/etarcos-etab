@@ -36,6 +36,7 @@ export type ModuleKey =
   | "discipline"
   | "documents"
   | "diplomas"
+  | "id_cards"
   | "reports"
   | "settings"
   | "ai_assistant"
@@ -74,7 +75,7 @@ const ALL_PERMISSIONS: PermissionSlug[] = (
     "parents", "classes", "cycles", "tracks", "subjects", "rooms", "timetables",
     "grades", "exams", "report_cards", "payments", "accounting", "expenses",
     "revenues", "library", "inventory", "hr", "attendance", "discipline",
-    "documents", "diplomas", "reports", "settings", "ai_assistant", "news",
+    "documents", "diplomas", "id_cards", "reports", "settings", "ai_assistant", "news",
   ] as ModuleKey[]
 ).flatMap((mod) =>
   (["view", "create", "edit", "delete", "export", "print", "approve"] as ActionKey[]).map(
@@ -126,6 +127,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "discipline:view", "discipline:create", "discipline:edit",
     "documents:view", "documents:create", "documents:print",
     "diplomas:view", "diplomas:create", "diplomas:print",
+    "id_cards:view", "id_cards:create", "id_cards:print",
     "reports:view", "reports:export", "reports:print",
     "payments:view",
     "library:view",
@@ -149,6 +151,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "attendance:view", "attendance:create", "attendance:edit", "attendance:delete",
     "discipline:view", "discipline:create", "discipline:edit",
     "documents:view", "documents:print",
+    "id_cards:view", "id_cards:create", "id_cards:print",
     "reports:view", "reports:print",
   ],
 
@@ -179,6 +182,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "parents:view", "parents:create", "parents:edit",
     "classes:view",
     "documents:view", "documents:create", "documents:print",
+    "id_cards:view", "id_cards:create", "id_cards:print",
     "payments:view", "payments:create",
     "attendance:view",
   ],

@@ -13,7 +13,7 @@ import {
   FolderOpen, Award, Library, Package, BarChart3, Sparkles,
   Building, UsersRound, Crown, Settings, ChevronDown, ChevronRight,
   PanelLeftClose, PanelLeftOpen, Zap, Bell, HelpCircle, Megaphone,
-  FileCode, LogOut, GitBranch, Route, Sun, Moon
+  FileCode, LogOut, GitBranch, Route, Sun, Moon, IdCard
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSidebarStore } from "@/store/sidebar-store";
@@ -31,7 +31,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   TrendingDown, TrendingUp, Briefcase, UserCog, Building2,
   FolderOpen, Award, Library, Package, BarChart3, Sparkles,
   Building, UsersRound, Crown, Settings, Bell, HelpCircle, Megaphone, FileCode,
-  GitBranch, Route
+  GitBranch, Route, IdCard
 };
 
 // Variants
@@ -244,6 +244,7 @@ const DIRECTOR_NAV = [
       { key: "dir-parents", label: "Parents", path: "/parents", icon: Users },
       { key: "dir-att", label: "Présences & Retards", path: "/attendance", icon: CalendarCheck },
       { key: "dir-disc", label: "Discipline", path: "/discipline", icon: ShieldAlert },
+      { key: "dir-idcards", label: "Cartes scolaires", path: "/id-cards", icon: IdCard },
     ]
   },
   {
