@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Send, User, Bot, HelpCircle, Loader2 } from "lucide-react";
+import { Sparkles, Send, User, Bot, Loader2, Info } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,11 @@ interface Message {
 
 export default function AiAssistantPage() {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "model", content: "Bonjour ! Je suis l'assistant IA d'Etarcos Etab. Je peux vous aider à analyser les résultats scolaires, à prédire les risques d'échec de vos élèves ou à rédiger des rapports d'activité. Que souhaitez-vous faire aujourd'hui ?" }
+    { role: "model", content: "Bonjour ! Je suis l'assistant IA d'Etarcos Etab. Je peux vous aider à rédiger des rapports, des courriers aux parents ou des appréciations, et répondre à vos questions pédagogiques. Je n'ai pas accès aux données de votre établissement : collez les chiffres utiles dans votre message si besoin." }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [configured, setConfigured] = useState(true);
 
   const handleSend = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -39,12 +40,14 @@ export default function AiAssistantPage() {
       });
 
       const data = await response.json();
-      if (data.reply) {
-        setMessages(prev => [...prev, { role: "model", content: data.reply }]);
+      if (typeof data.configured === "boolean") setConfigured(data.configured);
+      const content: string | undefined = data.message?.content;
+      if (content) {
+        setMessages(prev => [...prev, { role: "model", content }]);
       } else {
         setMessages(prev => [...prev, { role: "model", content: "Désolé, je n'ai pas pu générer de réponse pour le moment." }]);
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [...prev, { role: "model", content: "Erreur de connexion avec le service d'intelligence artificielle." }]);
     } finally {
       setLoading(false);
@@ -52,18 +55,27 @@ export default function AiAssistantPage() {
   };
 
   const suggestions = [
-    "Prédire les performances scolaires de Sarah Kamdem",
-    "Rédiger un rapport de performance pour la classe de 3ème A",
-    "Générer des conseils d'amélioration pour les élèves en difficulté",
+    "Rédiger un modèle de rapport de fin de trimestre pour une classe",
+    "Proposer un courrier aux parents pour signaler des retards répétés",
+    "Donner des conseils pour accompagner les élèves en difficulté",
   ];
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-140px)]">
       <PageHeader
         title="Assistant Etarcos AI"
-        description="Analysez les données académiques et obtenez des prédictions préventives sur la scolarité de vos élèves."
+        description="Rédaction de rapports, courriers et conseils pédagogiques assistés par IA."
         icon={Sparkles}
       />
+
+      <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+        <Info className="w-4 h-4 shrink-0 mt-0.5" />
+        <p>
+          {configured
+            ? "Fonctionnalité en bêta. L'assistant n'a pas accès aux données de l'établissement et peut se tromper : vérifiez toujours ses réponses."
+            : "L'assistant IA n'est pas activé sur cette installation. Contactez l'administrateur de la plateforme."}
+        </p>
+      </div>
 
       {/* Main Chat Workspace */}
       <div className="flex-1 bg-card rounded-xl border border-border flex flex-col overflow-hidden">

@@ -22,6 +22,8 @@ export interface AIChatRequest {
 export interface AIChatResponse {
   message: AIChatMessage;
   tokensUsed?: number;
+  /** false quand aucune clé Gemini n'est configurée (réponse de repli, pas une vraie réponse IA). */
+  configured: boolean;
   error?: string;
 }
 

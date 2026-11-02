@@ -1,132 +1,114 @@
 // ==================================================
-// Etarcos Etab – Gemini AI Service (Extensible)
+// Etarcos Etab – Gemini AI Service
 // ==================================================
 
-import type {
-  AIChatRequest,
-  AIChatResponse,
-  AIPerformanceAnalysisRequest,
-  AIPerformanceAnalysisResponse,
-  AIPredictionRequest,
-  AIPredictionResponse,
-} from "@/types/ai";
+import * as Sentry from "@sentry/nextjs";
+import type { AIChatMessage, AIChatRequest, AIChatResponse } from "@/types/ai";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_MODEL = "gemini-2.5-flash";
+
+/** Garde-fous sur l'historique envoyé à l'API (coût + taille de requête). */
+const MAX_HISTORY_MESSAGES = 20;
+const MAX_MESSAGE_LENGTH = 4000;
+
+const SYSTEM_INSTRUCTION =
+  "Tu es l'assistant d'Etarcos Etab, une plateforme de gestion d'établissements scolaires. " +
+  "Réponds en français, de façon concise et professionnelle. " +
+  "IMPORTANT : tu n'as AUCUN accès aux données de l'établissement (élèves, notes, paiements, classes). " +
+  "N'invente jamais de noms, de notes, de moyennes ou de statistiques. Si on te demande d'analyser " +
+  "des données réelles, explique que tu ne peux pas les consulter et propose une aide générale " +
+  "(méthode, modèle de rapport, conseils pédagogiques) ou invite l'utilisateur à coller les chiffres.";
+
+function getApiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === "your-gemini-api-key") return null;
+  return key;
+}
+
+function reply(content: string, configured: boolean, error?: string): AIChatResponse {
+  return {
+    message: { role: "model", content, timestamp: new Date().toISOString() },
+    configured,
+    ...(error ? { error } : {}),
+  };
+}
+
+/** Nettoie l'historique reçu du client : rôles valides, longueur bornée, N derniers messages. */
+export function sanitizeHistory(messages: unknown): Pick<AIChatMessage, "role" | "content">[] {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter(
+      (m): m is { role: string; content: string } =>
+        !!m && typeof m === "object" && typeof m.content === "string" && m.content.trim() !== ""
+    )
+    .map((m) => ({
+      role: m.role === "model" ? ("model" as const) : ("user" as const),
+      content: m.content.slice(0, MAX_MESSAGE_LENGTH),
+    }))
+    .slice(-MAX_HISTORY_MESSAGES);
+}
 
 /**
- * Service pour interagir avec l'API Google Gemini.
- * Conçu pour être extensible et sécurisé (ne plante pas si la clé est absente).
+ * Service d'interaction avec l'API Google Gemini.
+ *
+ * Seul le chat généraliste est implémenté. Il n'y a volontairement PAS
+ * d'analyse de classe ni de prédiction par élève : tant qu'elles ne
+ * s'appuient pas sur les vraies données de l'établissement, elles ne
+ * produiraient que des chiffres inventés.
  */
 export class GeminiService {
-  private static isConfigured(): boolean {
-    return !!GEMINI_API_KEY && GEMINI_API_KEY !== "your-gemini-api-key";
+  static isConfigured(): boolean {
+    return getApiKey() !== null;
   }
 
-  /**
-   * Assistant de discussion conversationnel
-   */
   static async chat(request: AIChatRequest): Promise<AIChatResponse> {
-    if (!this.isConfigured()) {
-      // Simulation en mode déconnecté (mock)
-      const lastMessage = request.messages[request.messages.length - 1]?.content.toLowerCase() || "";
-      let reply = "Je suis l'assistant IA d'Etarcos Etab. Le module IA n'est pas encore activé avec une clé API Gemini valide.";
-
-      if (lastMessage.includes("élève") || lastMessage.includes("étudiant")) {
-        reply = "Pour analyser le dossier d'un élève, activez le module IA dans les paramètres et renseignez votre clé GEMINI_API_KEY.";
-      } else if (lastMessage.includes("classe") || lastMessage.includes("moyenne")) {
-        reply = "Les statistiques et analyses de classe seront bientôt disponibles grâce à l'intégration de Gemini.";
-      }
-
-      return {
-        message: {
-          role: "model",
-          content: reply,
-          timestamp: new Date().toISOString(),
-        },
-      };
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return reply(
+        "L'assistant IA n'est pas encore activé sur cette installation (clé GEMINI_API_KEY absente). " +
+          "Contactez l'administrateur de la plateforme.",
+        false
+      );
     }
 
+    const history = sanitizeHistory(request.messages);
+    if (history.length === 0 || history[history.length - 1].role !== "user") {
+      return reply("Aucune question à traiter.", true, "empty_history");
+    }
+
+    const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+
     try {
-      // Intégration future directe avec l'API Gemini
-      const response = await fetch(`${API_URL}?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(`${API_BASE}/${model}:generateContent`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
-          contents: request.messages.map((m) => ({
-            role: m.role === "model" ? "model" : "user",
-            parts: [{ text: m.content }],
-          })),
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+          contents: history.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.statusText}`);
+        throw new Error(`Gemini API ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Pas de réponse de l'IA.";
+      const text: string | undefined = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-      return {
-        message: {
-          role: "model",
-          content: text,
-          timestamp: new Date().toISOString(),
-        },
-      };
+      return reply(text || "Pas de réponse de l'IA.", true);
     } catch (error) {
-      return {
-        message: {
-          role: "model",
-          content: "Désolé, une erreur est survenue lors de la communication avec l'assistant IA.",
-          timestamp: new Date().toISOString(),
-        },
-        error: error instanceof Error ? error.message : "Erreur inattendue.",
-      };
+      Sentry.captureException(error, { tags: { service: "gemini" } });
+      console.error("[ai] Erreur Gemini:", error);
+      return reply(
+        "Désolé, une erreur est survenue lors de la communication avec l'assistant IA.",
+        true,
+        "upstream_error"
+      );
     }
-  }
-
-  /**
-   * Analyse des performances d'une classe (bulletin, moyennes)
-   */
-  static async analyzeClassroom(
-    request: AIPerformanceAnalysisRequest
-  ): Promise<AIPerformanceAnalysisResponse> {
-    // Dans une version de production, nous requêterions la DB Supabase
-    // pour récupérer les notes puis nous les enverrions en contexte à Gemini.
-    
-    return {
-      summary: "Analyse prédictive de la classe : Les élèves montrent de très bons résultats en matières scientifiques, mais des lacunes subsistent en expression écrite.",
-      strengths: ["Mathématiques (Moyenne 14.5/20)", "Physique-Chimie (Moyenne 13.8/20)", "Assiduité générale"],
-      weaknesses: ["Français (Moyenne 9.8/20)", "Participation en classe en baisse de 5%"],
-      recommendations: [
-        "Planifier des cours de soutien en français le mercredi après-midi.",
-        "Encourager les travaux de groupe pour stimuler la prise de parole."
-      ],
-      riskStudentsCount: 3,
-      generatedAt: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Prédiction du taux d'échec ou décrochage scolaire d'un élève
-   */
-  static async predictStudentPerformance(
-    request: AIPredictionRequest
-  ): Promise<AIPredictionResponse> {
-    return {
-      predictedAverage: 11.25,
-      riskLevel: "medium",
-      dropoutRisk: false,
-      factors: [
-        "Augmentation des retards de 15% au cours du mois écoulé.",
-        "Baisse des notes en Histoire-Géographie."
-      ],
-      improvementSuggestions: [
-        "Renforcer le suivi des devoirs à la maison.",
-        "Prendre contact avec les parents pour faire le point sur les retards."
-      ],
-      generatedAt: new Date().toISOString(),
-    };
   }
 }

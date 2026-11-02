@@ -25,8 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createDocumentSchema, type CreateDocumentInput } from "../schemas";
+import { ACCEPT_ATTRIBUTE, MAX_UPLOAD_BYTES } from "@/lib/upload/validate";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Mo — aligné sur experimental.serverActions.bodySizeLimit
+const MAX_FILE_SIZE = MAX_UPLOAD_BYTES; // 10 Mo — même limite que /api/upload
 
 const CATEGORY_LABELS: Record<string, string> = {
   report_card: "Bulletin scolaire",
@@ -163,7 +164,7 @@ export function DocumentUploadDialog({ open, onClose, onSubmit, isLoading = fals
                 {isUploading ? "Téléversement..." : "Sélectionner un fichier (max 10 Mo)"}
               </Button>
             )}
-            <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden" disabled={isUploading} />
+            <input ref={fileInputRef} type="file" accept={ACCEPT_ATTRIBUTE} onChange={handleFileChange} className="hidden" disabled={isUploading} />
             {errors.file_url && <p className="text-xs text-destructive">{errors.file_url.message}</p>}
             {!fileUrl && !errors.file_url && (
               <input type="hidden" {...register("file_url")} />

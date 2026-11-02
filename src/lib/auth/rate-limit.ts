@@ -1,11 +1,27 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-let limiter: Ratelimit | null | undefined;
+/**
+ * Seuils par usage. Chaque bucket a son propre préfixe Redis, donc ses
+ * propres compteurs.
+ */
+const BUCKETS = {
+  /** Tentatives de connexion — identifiant typique : `ip:email`. */
+  login: { limit: 5, window: "5 m" },
+  /** Créations de compte publiques — identifiant : IP. */
+  register: { limit: 3, window: "1 h" },
+  /** Téléversements de fichiers — identifiant : id utilisateur. */
+  upload: { limit: 30, window: "10 m" },
+} as const satisfies Record<string, { limit: number; window: `${number} ${"s" | "m" | "h"}` }>;
+
+export type RateLimitBucket = keyof typeof BUCKETS;
+
+let redis: Redis | null | undefined;
+const limiters = new Map<RateLimitBucket, Ratelimit>();
 let warned = false;
 
-function getLimiter(): Ratelimit | null {
-  if (limiter !== undefined) return limiter;
+function getRedis(): Redis | null {
+  if (redis !== undefined) return redis;
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -14,41 +30,71 @@ function getLimiter(): Ratelimit | null {
     if (!warned) {
       console.warn(
         "[rate-limit] UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN absents — " +
-          "le rate limiting du login est désactivé (dégradation gracieuse). " +
+          "le rate limiting est désactivé (dégradation gracieuse). " +
           "À configurer avant la mise en production (déploiement serverless)."
       );
       warned = true;
     }
-    limiter = null;
-    return limiter;
+    redis = null;
+    return redis;
   }
 
-  limiter = new Ratelimit({
-    redis: new Redis({ url, token }),
-    limiter: Ratelimit.slidingWindow(5, "5 m"),
-    prefix: "etarcos:login",
-  });
-  return limiter;
+  redis = new Redis({ url, token });
+  return redis;
+}
+
+function getLimiter(bucket: RateLimitBucket): Ratelimit | null {
+  const client = getRedis();
+  if (!client) return null;
+
+  let rl = limiters.get(bucket);
+  if (!rl) {
+    const { limit, window } = BUCKETS[bucket];
+    rl = new Ratelimit({
+      redis: client,
+      limiter: Ratelimit.slidingWindow(limit, window),
+      prefix: `etarcos:${bucket}`,
+    });
+    limiters.set(bucket, rl);
+  }
+  return rl;
 }
 
 /**
- * Rate-limits login attempts (5 per 5 min window per identifier — typically
- * `ip:email`). Backed by Upstash Redis so it works across serverless
- * instances (unlike an in-memory counter, which resets per instance).
+ * Rate limiting générique, adossé à Upstash Redis pour fonctionner entre
+ * instances serverless (un compteur en mémoire se réinitialiserait par
+ * instance).
  *
- * Degrades gracefully to "always allowed" if Upstash isn't configured yet,
- * or if Upstash itself is unreachable — a rate limiter should never be the
- * reason legitimate users get locked out of a working app.
+ * Échec ouvert si Upstash n'est pas configuré ou injoignable : un rate
+ * limiter ne doit jamais être la raison pour laquelle des utilisateurs
+ * légitimes sont bloqués hors d'une application qui fonctionne.
  */
-export async function checkLoginRateLimit(identifier: string): Promise<{ allowed: boolean }> {
-  const rl = getLimiter();
+export async function checkRateLimit(
+  bucket: RateLimitBucket,
+  identifier: string
+): Promise<{ allowed: boolean }> {
+  const rl = getLimiter(bucket);
   if (!rl) return { allowed: true };
 
   try {
     const { success } = await rl.limit(identifier);
     return { allowed: success };
   } catch (err) {
-    console.error("[rate-limit] Upstash indisponible, échec ouvert:", err);
+    console.error(`[rate-limit:${bucket}] Upstash indisponible, échec ouvert:`, err);
     return { allowed: true };
   }
+}
+
+/** Tentatives de connexion : 5 par fenêtre de 5 min et par identifiant (`ip:email`). */
+export function checkLoginRateLimit(identifier: string): Promise<{ allowed: boolean }> {
+  return checkRateLimit("login", identifier);
+}
+
+/** IP du client derrière le proxy Vercel / un reverse proxy. */
+export function getClientIp(headers: Headers): string {
+  return (
+    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    headers.get("x-real-ip") ||
+    "unknown"
+  );
 }

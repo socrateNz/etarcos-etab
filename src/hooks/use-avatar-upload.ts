@@ -41,7 +41,7 @@ export function useAvatarUpload(onChange: (url: string | null) => void) {
           const res = await fetch("/api/upload", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file: base64String }),
+            body: JSON.stringify({ file: base64String, kind: "image" }),
           });
           const json = await res.json();
           if (json.success && json.url) {

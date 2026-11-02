@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Valeurs factices : le build n'a besoin que de variables présentes, il
+    # ne contacte aucun service. Ne JAMAIS mettre de vrais secrets ici.
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_NAME: Etarcos Etab
+      AUTH_SECRET: ci-dummy-secret-not-used-in-production-000000
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-dummy.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
+      SUPABASE_JWT_SECRET: ci-dummy-jwt-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Non bloquant tant que la dette de lint existante (~375 erreurs, surtout
+      # `no-explicit-any` et apostrophes non échappées) n'est pas résorbée.
+      # À passer en bloquant (retirer continue-on-error) une fois à zéro.
+      - name: Lint (non bloquant)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Production build
+        run: npm run build
