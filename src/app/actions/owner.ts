@@ -62,6 +62,7 @@ export async function getOwnerDashboardData(
       stats: { establishmentsCount: 0, students: 0, staff: 0, parents: 0 },
       finance: { revenues: 0, expenses: 0, profit: 0, paymentRate: 0 },
       academic: { avgGrade: 0, successRate: 0, bestEtab: "N/A" },
+      hr: { byPosition: [] as { position: string; count: number }[], payroll: 0 },
       recentPayments: [],
       recentActivities: [],
       alerts: [],
@@ -85,11 +86,11 @@ export async function getOwnerDashboardData(
     gradesDataRes
   ] = await Promise.all([
     db.from("students").select("id", { count: "exact", head: true }).in("establishment_id", targetIds),
-    db.from("staff_members").select("id", { count: "exact", head: true }).in("establishment_id", targetIds),
+    db.from("staff_members").select("id, position", { count: "exact" }).in("establishment_id", targetIds),
     db.from("parents").select("id", { count: "exact", head: true }).in("establishment_id", targetIds),
     db.from("payments").select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))").in("establishment_id", targetIds),
     db.from("expenses").select("amount, created_at, category").in("establishment_id", targetIds),
-    db.from("grades").select("value").in("establishment_id", targetIds)
+    db.from("grades").select("value, max_value").in("establishment_id", targetIds)
   ]);
 
   const studentsCount = studentsCountRes.count || 0;
@@ -107,9 +108,29 @@ export async function getOwnerDashboardData(
   const totalBilled = paymentsData.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
   const paymentRate = totalBilled > 0 ? Math.round((totalRevenues / totalBilled) * 100) : 0;
 
-  const avgGradeVal = gradesData.length > 0 
-    ? Number((gradesData.reduce((acc: number, g: any) => acc + Number(g.value || 0), 0) / gradesData.length).toFixed(2))
+  // Notes ramenées sur 20 (le barème max_value peut différer).
+  const on20 = (g: any) => {
+    const max = Number(g.max_value || 20);
+    return max > 0 ? (Number(g.value || 0) / max) * 20 : 0;
+  };
+  const avgGradeVal = gradesData.length > 0
+    ? Number((gradesData.reduce((acc: number, g: any) => acc + on20(g), 0) / gradesData.length).toFixed(2))
     : 0;
+
+  // Personnel par poste et masse salariale réelle (dépenses de catégorie salaire).
+  const positionCounts = new Map<string, number>();
+  for (const m of (staffCountRes.data || []) as { position: string | null }[]) {
+    const label = (m.position || "Non renseigné").trim() || "Non renseigné";
+    positionCounts.set(label, (positionCounts.get(label) || 0) + 1);
+  }
+  const hr = {
+    byPosition: [...positionCounts.entries()]
+      .map(([position, count]) => ({ position, count }))
+      .sort((a, b) => b.count - a.count),
+    payroll: expensesData
+      .filter((e: any) => /salai|paie|r[ée]mun|payroll|personnel/i.test(String(e.category || "")))
+      .reduce((acc: number, e: any) => acc + Number(e.amount || 0), 0),
+  };
 
   const stats = {
     establishmentsCount: targetIds.length,
@@ -125,7 +146,7 @@ export async function getOwnerDashboardData(
     paymentRate: paymentRate,
   };
 
-  const passingGradesCount = gradesData.filter((g: any) => Number(g.value || 0) >= 10).length;
+  const passingGradesCount = gradesData.filter((g: any) => on20(g) >= 10).length;
   const successRateVal = gradesData.length > 0 ? Math.round((passingGradesCount / gradesData.length) * 100) : 0;
 
   const academic = {
@@ -377,6 +398,7 @@ export async function getOwnerDashboardData(
     stats,
     finance,
     academic,
+    hr,
     attendance: {
       rate: attendanceRate,
       lateRate: lateRate,
@@ -461,16 +483,22 @@ export async function forceUpdatePasswordAction(newPassword: string) {
   const session = await auth();
   if (!session?.user) return { error: "Non authentifié." };
 
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 72) {
+    return { error: "Le mot de passe doit contenir entre 8 et 72 caractères." };
+  }
+
   try {
     const db = await createAdminClient();
-    
-    // Update user password and set requires_password_change metadata flag to false
+
+    // Conserve les métadonnées existantes (sans y recopier la session :
+    // rôle, permissions…) et lève l'obligation de changement.
+    const { data: authUser } = await db.auth.admin.getUserById(session.user.id);
     const { error } = await db.auth.admin.updateUserById(session.user.id, {
       password: newPassword,
       user_metadata: {
-        ...session.user, // preserve metadata
-        requires_password_change: false
-      }
+        ...(authUser?.user?.user_metadata ?? {}),
+        requires_password_change: false,
+      },
     });
 
     if (error) throw new Error(error.message);

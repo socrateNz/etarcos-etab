@@ -1,6 +1,10 @@
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Etarcos Etab";
 const LOGIN_URL = `${process.env.NEXT_PUBLIC_APP_URL || ""}/login`;
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
 function wrap(title: string, bodyHtml: string): string {
   return `<!doctype html>
 <html>
@@ -68,5 +72,27 @@ export function passwordResetEmail(params: { name: string; email: string; tempPa
        </p>`
     ),
     text: `${APP_NAME} — Réinitialisation de mot de passe\n\nBonjour ${name}, votre mot de passe a été réinitialisé.\nIdentifiant : ${email}\nNouveau mot de passe temporaire : ${tempPassword}\n\nConnexion : ${LOGIN_URL}\nSi vous n'êtes pas à l'origine de cette demande, contactez votre administration.`,
+  };
+}
+
+export function passwordResetLinkEmail(params: { name: string; resetUrl: string; minutes: number }) {
+  const { resetUrl, minutes } = params;
+  const name = escapeHtml(params.name);
+  return {
+    subject: `${APP_NAME} — réinitialiser votre mot de passe`,
+    html: wrap(
+      `Mot de passe oublié`,
+      `<p style="font-size: 14px; color: #374151; margin: 0 0 16px;">
+         Bonjour ${name}, une demande de réinitialisation de mot de passe a été faite pour votre compte.
+         Cliquez sur le bouton ci-dessous pour en choisir un nouveau. Ce lien est valable ${minutes} minutes et ne peut servir qu'une fois.
+       </p>
+       <a href="${resetUrl}" style="display: inline-block; background: #4f46e5; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;">
+         Choisir un nouveau mot de passe
+       </a>
+       <p style="font-size: 13px; color: #6b7280; margin: 24px 0 0;">
+         Si vous n'êtes pas à l'origine de cette demande, ignorez cet email : votre mot de passe actuel reste inchangé.
+       </p>`
+    ),
+    text: `${APP_NAME} — Mot de passe oublié\n\nBonjour ${params.name}, pour choisir un nouveau mot de passe, ouvrez ce lien (valable ${minutes} minutes, usage unique) :\n${resetUrl}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez cet email.`,
   };
 }

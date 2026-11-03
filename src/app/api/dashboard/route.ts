@@ -1,12 +1,25 @@
 import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveEstablishmentId, isStudentScopedRole } from "@/lib/auth/active-etab";
+import {
+  buildMonthlySeries,
+  currentAcademicYear,
+  sumForMonth,
+  type SchoolDashboardData,
+} from "@/lib/dashboard/school-stats";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+
+  // Statistiques de toute l'école : réservées au personnel.
+  const role = session.user.role;
+  if (isStudentScopedRole(role)) {
+    return NextResponse.json({ error: "Tableau de bord réservé au personnel." }, { status: 403 });
   }
 
   try {
@@ -16,150 +29,114 @@ export async function GET() {
       return NextResponse.json({ error: "Aucun établissement associé à votre compte." }, { status: 400 });
     }
 
-    // Statistiques de toute l'école : réservées au personnel. Les parents et
-    // élèves y voyaient le chiffre d'affaires et les impayés nominatifs.
-    const role = session.user.role;
-    if (isStudentScopedRole(role)) {
-      return NextResponse.json({ error: "Tableau de bord réservé au personnel." }, { status: 403 });
-    }
-    // Données financières : uniquement avec la permission payments:view
-    // (un enseignant, par exemple, ne doit pas voir les paiements).
+    // Données financières : uniquement avec la permission payments:view.
     const canSeeFinance = role === "super_admin" || session.user.permissions.includes("payments:view");
+    const year = currentAcademicYear();
+    const yearStart = year.start.toISOString();
 
-    // 1. Fetch counts from database
-    const { count: studentCount } = await supabase
-      .from("students")
-      .select("*", { count: "exact", head: true })
-      .eq("establishment_id", estId);
+    const [studentsRes, staffRes, paymentsRes, expensesRes, recentStudentsRes, gradesRes] = await Promise.all([
+      supabase.from("students").select("id", { count: "exact", head: true }).eq("establishment_id", estId),
+      supabase.from("staff_members").select("id", { count: "exact", head: true }).eq("establishment_id", estId),
+      canSeeFinance
+        ? supabase
+            .from("payments")
+            .select("id, amount_paid, payment_date, created_at, student:students(user:users(name))")
+            .eq("establishment_id", estId)
+            .gte("created_at", yearStart)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
+      canSeeFinance
+        ? supabase
+            .from("expenses")
+            .select("amount, expense_date, created_at")
+            .eq("establishment_id", estId)
+            .gte("expense_date", yearStart.slice(0, 10))
+        : Promise.resolve({ data: [] }),
+      supabase
+        .from("students")
+        .select("id, created_at, user:users(name), classroom:classrooms(name)")
+        .eq("establishment_id", estId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("grades")
+        .select("value, max_value, classroom:classrooms(name)")
+        .eq("establishment_id", estId),
+    ]);
 
-    const { count: staffCount } = await supabase
-      .from("staff_members")
-      .select("*", { count: "exact", head: true })
-      .eq("establishment_id", estId);
+    for (const r of [studentsRes, staffRes, paymentsRes, expensesRes, recentStudentsRes, gradesRes]) {
+      if (r?.error) throw r.error;
+    }
 
-    // 2. Fetch monthly payments sum
-    const { data: payments } = canSeeFinance
-      ? await supabase
-          .from("payments")
-          .select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))")
-          .eq("establishment_id", estId)
-      : { data: [] as any[] };
+    const payments: any[] = paymentsRes.data ?? [];
+    const expenses: any[] = expensesRes.data ?? [];
 
-    const totalPayments = payments?.reduce((acc: number, p: any) => acc + Number(p.amount_paid || 0), 0) || 0;
+    const incomes = payments.map((p) => ({ date: p.payment_date || p.created_at, amount: p.amount_paid }));
+    const outgoings = expenses.map((e) => ({ date: e.expense_date || e.created_at, amount: e.amount }));
 
-    // 3. Construct recent activities from database rows
-    const { data: recentStudents } = await supabase
-      .from("students")
-      .select("created_at, user:users(name)")
-      .eq("establishment_id", estId)
-      .order("created_at", { ascending: false })
-      .limit(5);
+    // Moyennes
+    // Ramène chaque note sur 20 (le barème `max_value` peut différer).
+    const on20 = (g: any) => {
+      const max = Number(g.max_value || 20);
+      return max > 0 ? (Number(g.value || 0) / max) * 20 : 0;
+    };
+    const grades: any[] = gradesRes.data ?? [];
+    const average =
+      grades.length > 0
+        ? Number((grades.reduce((acc, g) => acc + on20(g), 0) / grades.length).toFixed(2))
+        : null;
 
-    const { data: recentPayments } = canSeeFinance
-      ? await supabase
-          .from("payments")
-          .select("amount_paid, created_at, student:students(user:users(name))")
-          .eq("establishment_id", estId)
-          .order("created_at", { ascending: false })
-          .limit(5)
-      : { data: [] as any[] };
+    const perClass = new Map<string, { total: number; count: number }>();
+    for (const g of grades) {
+      const name = g.classroom?.name || "Sans classe";
+      const entry = perClass.get(name) ?? { total: 0, count: 0 };
+      entry.total += on20(g);
+      entry.count += 1;
+      perClass.set(name, entry);
+    }
+    const classPerformance = [...perClass.entries()]
+      .map(([classe, d]) => ({ classe, moyenne: Number((d.total / d.count).toFixed(1)) }))
+      .sort((a, b) => a.classe.localeCompare(b.classe, "fr"));
 
-    const dbActivities: any[] = [];
-    if (recentStudents) {
-      recentStudents.forEach((s: any) => {
-        dbActivities.push({
-          id: `stud-${s.user?.name}-${s.created_at}`,
-          user: { name: "Secrétaire", role: "Secrétaire" },
-          action: "a inscrit",
-          target: `${s.user?.name || "Nouvel élève"}`,
-          time: s.created_at,
-          type: "enrollment"
-        });
+    // Activités récentes (faits réels, sans auteur inventé)
+    const activities: SchoolDashboardData["recentActivities"] = [];
+    for (const s of recentStudentsRes.data ?? []) {
+      activities.push({
+        id: `stud-${s.id}`,
+        title: `Inscription : ${s.user?.name || "élève"}`,
+        detail: s.classroom?.name ? `Classe ${s.classroom.name}` : "Sans classe",
+        time: s.created_at,
+        type: "enrollment",
       });
     }
-    if (recentPayments) {
-      recentPayments.forEach((p: any) => {
-        dbActivities.push({
-          id: `pay-${p.created_at}`,
-          user: { name: "Comptable", role: "Comptable" },
-          action: "a enregistré un paiement de",
-          target: `${Number(p.amount_paid).toLocaleString()} FCFA pour ${p.student?.user?.name || "élève"}`,
-          time: p.created_at,
-          type: "payment"
-        });
+    for (const p of payments.slice(0, 5)) {
+      activities.push({
+        id: `pay-${p.id}`,
+        title: `Paiement : ${Number(p.amount_paid || 0).toLocaleString("fr-FR")} FCFA`,
+        detail: p.student?.user?.name || "Élève",
+        time: p.created_at,
+        type: "payment",
       });
     }
-    dbActivities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
-    // 4. Pending payments
-    const pendingPayments = payments
-      ?.filter((p: any) => p.status !== "paid")
-      .slice(0, 5)
-      .map((p: any) => {
-        const amt = Number(p.amount || 0);
-        const paid = Number(p.amount_paid || 0);
-        return {
-          student: p.student?.user?.name || "Élève",
-          class: p.student?.classroom?.name || "Sans classe",
-          amount: amt - paid,
-          due: p.created_at
-        };
-      }) || [];
+    const body: SchoolDashboardData = {
+      academicYear: year.label,
+      canSeeFinance,
+      kpis: {
+        students: studentsRes.count ?? 0,
+        staff: staffRes.count ?? 0,
+        monthRevenue: canSeeFinance ? sumForMonth(incomes) : null,
+        averageGrade: average,
+      },
+      monthlyRevenue: canSeeFinance ? buildMonthlySeries(incomes, outgoings, year) : [],
+      classPerformance,
+      recentActivities: activities.slice(0, 8),
+    };
 
-    // 5. Monthly financial chart grouping
-    const monthNames = ["Sep", "Oct", "Nov", "Déc", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun"];
-    const monthlyData = monthNames.map(m => ({ month: m, revenus: 0, depenses: 0 }));
-    
-    payments?.forEach((p: any) => {
-      const date = new Date(p.created_at);
-      const monthIndex = date.getMonth();
-      const mappedMonths = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
-      const monthStr = mappedMonths[monthIndex];
-      const chartItem = monthlyData.find(item => item.month === monthStr);
-      if (chartItem) {
-        chartItem.revenus += Number(p.amount_paid || 0);
-      }
-    });
-
-    // 6. Fetch average grades overall and per classroom
-    const { data: dbGrades } = await supabase
-      .from("grades")
-      .select("value, classroom:classrooms(name)")
-      .eq("establishment_id", estId);
-
-    const overallAvg = dbGrades && dbGrades.length > 0
-      ? (dbGrades.reduce((acc: number, g: any) => acc + Number(g.value || 0), 0) / dbGrades.length).toFixed(2)
-      : "N/A";
-
-    const classroomMoyennesMap: { [key: string]: { total: number; count: number } } = {};
-    (dbGrades || []).forEach((g: any) => {
-      const clsName = g.classroom?.name || "Sans classe";
-      if (!classroomMoyennesMap[clsName]) {
-        classroomMoyennesMap[clsName] = { total: 0, count: 0 };
-      }
-      classroomMoyennesMap[clsName].total += Number(g.value || 0);
-      classroomMoyennesMap[clsName].count += 1;
-    });
-
-    const classPerformance = Object.entries(classroomMoyennesMap).map(([classe, data]) => ({
-      classe,
-      moyenne: Number((data.total / data.count).toFixed(1))
-    }));
-
-    return NextResponse.json({
-      kpis: [
-        { title: "Total Élèves", value: studentCount || 0, trend: 0, subtitle: "Inscrits cette année", color: "brand" },
-        { title: "Revenus du mois", value: canSeeFinance ? totalPayments : "—", trend: 0, subtitle: canSeeFinance ? "Total reçu" : "Accès réservé", color: "success" },
-        { title: "Personnel actif", value: staffCount || 0, trend: 0, subtitle: "Enseignants & Admin", color: "violet" },
-        { title: "Moyenne générale", value: overallAvg === "N/A" ? "N/A" : `${overallAvg}/20`, trend: 0, subtitle: overallAvg === "N/A" ? "Aucune note enregistrée" : "Notes saisies", color: "cyan" },
-      ],
-      recentActivities: dbActivities,
-      pendingPayments: pendingPayments,
-      upcomingEvents: [],
-      monthlyRevenue: monthlyData,
-      classPerformance: classPerformance
-    });
+    return NextResponse.json(body);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
+    Sentry.captureException(error, { tags: { route: "api/dashboard" } });
+    return NextResponse.json({ error: "Impossible de charger le tableau de bord." }, { status: 500 });
   }
 }

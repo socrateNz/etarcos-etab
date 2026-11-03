@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
 import {
-  Search, Bell, Sun, Moon, LogOut, Settings, User,
+  Search, Bell, Sun, Moon, LogOut, Settings, User, HelpCircle,
   ChevronDown, Menu, X, Command, Building,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -434,6 +434,11 @@ export function Navbar() {
             <DropdownMenuItem onClick={() => router.push("/settings")} className="flex items-center gap-2 cursor-pointer">
               <Settings className="w-4 h-4" />
               Paramètres
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={() => router.push("/support")} className="flex items-center gap-2 cursor-pointer">
+              <HelpCircle className="w-4 h-4" />
+              Aide & support
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

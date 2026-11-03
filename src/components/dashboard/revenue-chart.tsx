@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
@@ -9,19 +8,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
-
-const DEFAULT_MONTHLY_REVENUE = [
-  { month: "Sep", revenus: 0, depenses: 0 },
-  { month: "Oct", revenus: 0, depenses: 0 },
-  { month: "Nov", revenus: 0, depenses: 0 },
-  { month: "Déc", revenus: 0, depenses: 0 },
-  { month: "Jan", revenus: 0, depenses: 0 },
-  { month: "Fév", revenus: 0, depenses: 0 },
-  { month: "Mar", revenus: 0, depenses: 0 },
-  { month: "Avr", revenus: 0, depenses: 0 },
-  { month: "Mai", revenus: 0, depenses: 0 },
-  { month: "Jun", revenus: 0, depenses: 0 },
-];
+import type { SchoolDashboardData } from "@/lib/dashboard/school-stats";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -45,31 +32,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function RevenueChart() {
-  const [revenueData, setRevenueData] = useState(DEFAULT_MONTHLY_REVENUE);
-  const [classPerformance, setClassPerformance] = useState<{ classe: string; moyenne: number }[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    async function loadChartData() {
-      try {
-        const res = await fetch("/api/dashboard");
-        const json = await res.json();
-        if (active) {
-          if (json.monthlyRevenue) {
-            setRevenueData(json.monthlyRevenue);
-          }
-          if (json.classPerformance) {
-            setClassPerformance(json.classPerformance);
-          }
-        }
-      } catch (err) {
-        console.error("Erreur de chargement du graphique:", err);
-      }
-    }
-    loadChartData();
-    return () => { active = false; };
-  }, []);
+export function RevenueChart({ data }: { data: SchoolDashboardData }) {
+  const { monthlyRevenue: revenueData, classPerformance, canSeeFinance, academicYear } = data;
+  const defaultTab = canSeeFinance ? "revenue" : "performance";
 
   return (
     <motion.div
@@ -79,16 +44,17 @@ export function RevenueChart() {
     >
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Analyse financière</CardTitle>
-          <CardDescription>Revenus et dépenses – Année scolaire 2025/2026</CardDescription>
+          <CardTitle className="text-base">{canSeeFinance ? "Finances & résultats" : "Résultats scolaires"}</CardTitle>
+          <CardDescription>Année scolaire {academicYear}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="revenue">
+          <Tabs defaultValue={defaultTab}>
             <TabsList className="mb-4">
-              <TabsTrigger value="revenue">Revenus & Dépenses</TabsTrigger>
-              <TabsTrigger value="performance">Performance académique</TabsTrigger>
+              {canSeeFinance && <TabsTrigger value="revenue">Revenus & Dépenses</TabsTrigger>}
+              <TabsTrigger value="performance">Moyennes par classe</TabsTrigger>
             </TabsList>
 
+            {canSeeFinance && (
             <TabsContent value="revenue">
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={revenueData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -108,7 +74,7 @@ export function RevenueChart() {
                     tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
+                    tickFormatter={(v) => new Intl.NumberFormat("fr-FR", { notation: "compact" }).format(v)}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend formatter={(v) => v === "revenus" ? "Revenus" : "Dépenses"} />
@@ -129,8 +95,12 @@ export function RevenueChart() {
                 </AreaChart>
               </ResponsiveContainer>
             </TabsContent>
+            )}
 
             <TabsContent value="performance">
+              {classPerformance.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-24">Aucune note enregistrée pour le moment.</p>
+              ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={classPerformance} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                   <defs>
@@ -158,6 +128,7 @@ export function RevenueChart() {
                   />
                 </BarChart>
               </ResponsiveContainer>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

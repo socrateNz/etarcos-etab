@@ -29,7 +29,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
-import { listEstablishmentPlans, listUsersAction } from "@/app/actions/superadmin";
+import { listEstablishmentPlans, listUsersAction, getPlatformProfileCountsAction } from "@/app/actions/superadmin";
+import { AiSynthesis } from "@/components/reports/ai-synthesis";
 import { getOwnerDashboardData } from "@/app/actions/owner";
 import { useOwnerStore } from "@/store/owner-store";
 import {
@@ -64,7 +65,8 @@ function ReportsPageInner() {
     schoolsCount: 0,
     usersCount: 0,
     mrr: 0,
-    plansSplit: { free: 0, pro: 0, premium: 0, enterprise: 0 },
+    plansSplit: { free: 0, starter: 0, professional: 0, enterprise: 0 },
+    profiles: { students: 0, staff: 0, parents: 0, owners: 0 },
   });
   const [saasLoading, setSaasLoading] = useState(true);
 
@@ -80,18 +82,18 @@ function ReportsPageInner() {
     try {
       setSaasLoading(true);
       const schoolsRes = await listEstablishmentPlans();
-      const usersRes = await listUsersAction();
+      const [usersRes, profilesRes] = await Promise.all([listUsersAction(), getPlatformProfileCountsAction()]);
 
       const schoolsList = schoolsRes.data ?? [];
-      const split = { free: 0, pro: 0, premium: 0, enterprise: 0 };
+      const split = { free: 0, starter: 0, professional: 0, enterprise: 0 };
       let estimatedRevenue = 0;
 
       schoolsList.forEach((s: any) => {
         if (s.plan in split) {
           split[s.plan as keyof typeof split]++;
         }
-        if (s.plan === "pro") estimatedRevenue += 45000;
-        else if (s.plan === "premium") estimatedRevenue += 90000;
+        if (s.plan === "starter") estimatedRevenue += 45000;
+        else if (s.plan === "professional") estimatedRevenue += 90000;
         else if (s.plan === "enterprise") estimatedRevenue += 250000;
       });
 
@@ -100,6 +102,7 @@ function ReportsPageInner() {
         usersCount: (usersRes.data ?? []).length,
         mrr: estimatedRevenue,
         plansSplit: split,
+        profiles: profilesRes.data ?? { students: 0, staff: 0, parents: 0, owners: 0 },
       });
     } catch (e) {
       console.error(e);
@@ -157,9 +160,7 @@ function ReportsPageInner() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-500">{formatCurrency(saasStats.mrr)}</div>
-              <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-emerald-500" /> +12.4% vs mois dernier
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">Estimation d'après les formules des établissements</p>
             </CardContent>
           </Card>
 
@@ -187,12 +188,14 @@ function ReportsPageInner() {
 
           <Card>
             <CardHeader className="py-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Rétention Client</CardTitle>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Formules payantes</CardTitle>
               <ArrowUpRight className="w-4 h-4 text-cyan-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">98.2 %</div>
-              <p className="text-[10px] text-muted-foreground mt-1">Churn résiduel de 1.8%</p>
+              <div className="text-2xl font-bold text-foreground">
+                {saasStats.plansSplit.starter + saasStats.plansSplit.professional + saasStats.plansSplit.enterprise}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Établissements en Starter, Professionnel ou Entreprise</p>
             </CardContent>
           </Card>
         </div>
@@ -232,28 +235,28 @@ function ReportsPageInner() {
               <div className="flex items-center justify-between p-3 bg-muted/20 border rounded-xl">
                 <div>
                   <p className="text-sm font-bold text-foreground">Élèves inscrits</p>
-                  <p className="text-xs text-muted-foreground">Comptes apprenants</p>
+                  <p className="text-xs text-muted-foreground">Dossiers élèves</p>
                 </div>
                 <Badge variant="outline" className="text-brand-500 border-brand-500/20 font-mono">
-                  {Math.max(0, Math.floor(saasStats.usersCount * 0.7))}
+                  {saasStats.profiles.students}
                 </Badge>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/20 border rounded-xl">
                 <div>
-                  <p className="text-sm font-bold text-foreground">Enseignants & Professeurs</p>
-                  <p className="text-xs text-muted-foreground">Personnel académique</p>
+                  <p className="text-sm font-bold text-foreground">Personnel</p>
+                  <p className="text-xs text-muted-foreground">Enseignants et administration</p>
                 </div>
                 <Badge variant="outline" className="text-blue-500 border-blue-500/20 font-mono">
-                  {Math.max(0, Math.floor(saasStats.usersCount * 0.15))}
+                  {saasStats.profiles.staff}
                 </Badge>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/20 border rounded-xl">
                 <div>
-                  <p className="text-sm font-bold text-foreground">Directeurs & Secrétariats</p>
-                  <p className="text-xs text-muted-foreground">Gestion administrative</p>
+                  <p className="text-sm font-bold text-foreground">Parents & propriétaires</p>
+                  <p className="text-xs text-muted-foreground">Comptes familles et promoteurs</p>
                 </div>
                 <Badge variant="outline" className="text-amber-500 border-amber-500/20 font-mono">
-                  {Math.max(0, Math.floor(saasStats.usersCount * 0.1))}
+                  {saasStats.profiles.parents + saasStats.profiles.owners}
                 </Badge>
               </div>
             </CardContent>
@@ -507,17 +510,17 @@ function ReportsPageInner() {
                         <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Masse salariale</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-rose-400">{formatCurrency(Math.round(currentStats.expenses * 0.6), "XAF")}</div>
-                        <p className="text-[10px] text-muted-foreground mt-1">Estimation des rémunérations mensuelles</p>
+                        <div className="text-2xl font-bold text-rose-400">{formatCurrency(ownerData?.hr?.payroll ?? 0, "XAF")}</div>
+                        <p className="text-[10px] text-muted-foreground mt-1">Dépenses saisies en catégorie « Salaires »</p>
                       </CardContent>
                     </Card>
                     <Card className="bg-card/50">
                       <CardHeader className="py-3">
-                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Enseignants Actifs</CardTitle>
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Postes différents</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-white">{Math.round(currentStats.staff * 0.7)} profs</div>
-                        <p className="text-[10px] text-muted-foreground mt-1">Actifs dans les classes d'établissements</p>
+                        <div className="text-2xl font-bold text-white">{ownerData?.hr?.byPosition?.length ?? 0}</div>
+                        <p className="text-[10px] text-muted-foreground mt-1">Fonctions renseignées dans les fiches du personnel</p>
                       </CardContent>
                     </Card>
                   </div>
@@ -525,44 +528,34 @@ function ReportsPageInner() {
                   <Card className="bg-card/50">
                     <CardHeader>
                       <CardTitle className="text-sm font-bold text-white">Répartition du Personnel</CardTitle>
-                      <CardDescription>Structure hiérarchique de l'encadrement</CardDescription>
+                      <CardDescription>Effectif par poste déclaré</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-muted-foreground">
                           <thead className="text-xs text-white uppercase bg-muted/20">
                             <tr>
-                              <th className="px-4 py-3 font-semibold">Rôle</th>
-                              <th className="px-4 py-3 font-semibold text-center">Effectif estimé</th>
+                              <th className="px-4 py-3 font-semibold">Poste</th>
+                              <th className="px-4 py-3 font-semibold text-center">Effectif</th>
                               <th className="px-4 py-3 font-semibold text-center">Part relative</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/10">
-                            <tr>
-                              <td className="px-4 py-3 font-medium text-white">Directeurs</td>
-                              <td className="px-4 py-3 text-center">{Math.max(1, Math.round(currentStats.staff * 0.05))}</td>
-                              <td className="px-4 py-3 text-center">5 %</td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 font-medium text-white">Administrateurs & Censeurs</td>
-                              <td className="px-4 py-3 text-center">{Math.max(1, Math.round(currentStats.staff * 0.1))}</td>
-                              <td className="px-4 py-3 text-center">10 %</td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 font-medium text-white">Comptables</td>
-                              <td className="px-4 py-3 text-center">{Math.max(1, Math.round(currentStats.staff * 0.05))}</td>
-                              <td className="px-4 py-3 text-center">5 %</td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 font-medium text-white">Enseignants</td>
-                              <td className="px-4 py-3 text-center">{Math.round(currentStats.staff * 0.7)}</td>
-                              <td className="px-4 py-3 text-center">70 %</td>
-                            </tr>
-                            <tr>
-                              <td className="px-4 py-3 font-medium text-white">Autres employés</td>
-                              <td className="px-4 py-3 text-center">{Math.round(currentStats.staff * 0.1)}</td>
-                              <td className="px-4 py-3 text-center">10 %</td>
-                            </tr>
+                            {(ownerData?.hr?.byPosition ?? []).length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="px-4 py-6 text-center">Aucun membre du personnel enregistré.</td>
+                              </tr>
+                            ) : (
+                              (ownerData?.hr?.byPosition ?? []).map((row: { position: string; count: number }) => (
+                                <tr key={row.position}>
+                                  <td className="px-4 py-3 font-medium text-white">{row.position}</td>
+                                  <td className="px-4 py-3 text-center">{row.count}</td>
+                                  <td className="px-4 py-3 text-center">
+                                    {currentStats.staff > 0 ? Math.round((row.count / currentStats.staff) * 100) : 0} %
+                                  </td>
+                                </tr>
+                              ))
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -617,44 +610,22 @@ function ReportsPageInner() {
 
               {/* TAB 5: AI */}
               {activeTab === "ai" && (
-                <div className="space-y-6">
-                  <Card className="border-primary/20 bg-primary/5">
-                    <CardHeader className="flex flex-row items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-brand-gradient flex items-center justify-center">
-                        <Bot className="w-4.5 h-4.5 text-white" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-sm font-bold text-white">Rapport Synthétique IA Gemini</CardTitle>
-                        <CardDescription>Rapport stratégique consolidé généré automatiquement</CardDescription>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4 pt-2">
-                      <div className="p-4 border rounded-xl bg-background text-sm text-slate-300 leading-relaxed whitespace-pre-line space-y-4">
-                        <p>
-                          <strong>Analyse des performances scolaires globales :</strong>
-                          <br />
-                          Le niveau académique de votre réseau d'établissements est satisfaisant, avec une moyenne générale de <strong>{currentStats.avgGrade}/20</strong>. Le taux de réussite estimé aux examens officiels s'établit à <strong>{currentStats.successRate}%</strong>, démontrant une bonne assimilation des acquis.
-                        </p>
-                        <p>
-                          <strong>Points de Vigilance Financière :</strong>
-                          <br />
-                          Le taux de paiement actuel de <strong>{currentStats.paymentRate}%</strong> montre un manque à gagner temporaire de <strong>{formatCurrency(currentStats.revenues * (1 - currentStats.paymentRate/100), "XAF")}</strong>. Des relances ciblées sur les 15 familles en situation d'impayé critique pourraient améliorer la trésorerie du mois.
-                        </p>
-                        <p>
-                          <strong>Recommandations RH & Opérationnelles :</strong>
-                          <br />
-                          La masse salariale représente <strong>60%</strong> des dépenses de fonctionnement globales, un ratio stable et sain. Cependant, l'assiduité du personnel à <strong>94%</strong> pourrait être optimisée en programmant des entretiens de suivi pour les retards répétés enregistrés le vendredi matin.
-                        </p>
-                      </div>
-
-                      <div className="flex justify-end">
-                        <Button className="bg-brand-500 hover:bg-brand-600 text-white font-sans text-xs gap-2">
-                          <FileText className="w-4 h-4" /> Exporter le rapport IA PDF
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AiSynthesis
+                  stats={{
+                    establishments: currentStats.establishmentsCount,
+                    students: currentStats.students,
+                    staff: currentStats.staff,
+                    parents: currentStats.parents,
+                    revenues: currentStats.revenues,
+                    expenses: currentStats.expenses,
+                    paymentRate: currentStats.paymentRate,
+                    avgGrade: currentStats.avgGrade,
+                    successRate: currentStats.successRate,
+                    attendanceRate: ownerData?.attendance?.rate ?? null,
+                    lateRate: ownerData?.attendance?.lateRate ?? null,
+                    payroll: ownerData?.hr?.payroll ?? 0,
+                  }}
+                />
               )}
             </div>
           )}

@@ -1,5 +1,5 @@
 import { sendMail, type SendMailResult } from "./mailer";
-import { welcomeEmail, passwordResetEmail } from "./templates";
+import { welcomeEmail, passwordResetEmail, passwordResetLinkEmail } from "./templates";
 
 export { sendMail } from "./mailer";
 export type { SendMailResult } from "./mailer";
@@ -19,5 +19,15 @@ export async function sendPasswordResetEmail(params: {
   tempPassword: string;
 }): Promise<SendMailResult> {
   const { subject, html, text } = passwordResetEmail(params);
+  return sendMail({ to: params.email, subject, html, text });
+}
+
+export async function sendPasswordResetLinkEmail(params: {
+  email: string;
+  name: string;
+  resetUrl: string;
+  minutes: number;
+}): Promise<SendMailResult> {
+  const { subject, html, text } = passwordResetLinkEmail(params);
   return sendMail({ to: params.email, subject, html, text });
 }

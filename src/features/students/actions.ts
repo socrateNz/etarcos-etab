@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId, resolveEstablishmentScope, applyEstablishmentScope, resolveStudentScope, canSeeStudent } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, resolveEstablishmentScope, applyEstablishmentScope, resolveStudentScope } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -66,7 +66,6 @@ export async function listStudents(
     parsed.data.establishment_id
   );
   if (scope.kind === "none") return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
-  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();
@@ -396,39 +395,3 @@ export async function deleteStudentAction(id: string): Promise<ActionResult<void
   }
 }
 
-/**
- * Lecture d'un élève par id, avec les mêmes garde-fous que la liste :
- * permission `students:view`, établissement de l'appelant, et périmètre
- * parent / élève.
- */
-export async function getStudentByIdAction(
-  id: string
-): Promise<ActionResult<StudentWithRelations>> {
-  const authResult = await requireAuth("view");
-  if (authResult.error) return { error: authResult.error };
-
-  if (!canSeeStudent(await resolveStudentScope(), id)) {
-    return { error: "Élève introuvable." };
-  }
-
-  try {
-    const db = await getDb();
-    const { data } = await db
-      .from("students")
-      .select("*, user:users(*), classroom:classrooms(id, name), track:tracks(id, name, code)")
-      .eq("id", id)
-      .maybeSingle();
-    if (!data) return { error: "Élève introuvable." };
-
-    const estId = await resolveEstablishmentId(
-      authResult.session!.user.establishment_id,
-      data.establishment_id
-    );
-    // Même message que « introuvable » : ne confirme pas l'existence de l'élève.
-    if (estId !== data.establishment_id) return { error: "Élève introuvable." };
-
-    return { success: true, data: data as StudentWithRelations };
-  } catch {
-    return { error: "Impossible de charger l'élève." };
-  }
-}

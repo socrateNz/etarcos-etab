@@ -10,9 +10,7 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  Lock,
   Mail,
-  ArrowRight,
   CheckCircle2,
   Zap,
 } from "lucide-react";
@@ -179,16 +177,10 @@ export default function LoginPage() {
             </span>
           </label>
           <Link
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              toast.info("Mot de passe oublié", {
-                description: "Veuillez contacter l'administrateur de votre établissement pour réinitialiser vos accès.",
-              });
-            }}
+            href="/forgot-password"
             className="text-xs font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors"
           >
-            Forgot Password?
+            Mot de passe oublié ?
           </Link>
         </div>
 

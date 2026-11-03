@@ -105,6 +105,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "settings:view", "settings:edit",
     "hr:view",
     "news:view", "news:create", "news:edit", "news:delete",
+    "ai_assistant:view",
   ],
 
   director: [
@@ -135,6 +136,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "settings:view",
     "hr:view", "hr:create", "hr:edit",
     "news:view", "news:create", "news:edit", "news:delete",
+    "ai_assistant:view",
   ],
 
   censor: [
@@ -153,6 +155,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "documents:view", "documents:print",
     "id_cards:view", "id_cards:create", "id_cards:print",
     "reports:view", "reports:print",
+    "ai_assistant:view",
   ],
 
   accountant: [
@@ -174,6 +177,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "grades:view", "grades:create", "grades:edit",
     "attendance:view", "attendance:create", "attendance:edit", "attendance:delete",
     "discipline:view", "discipline:create",
+    "ai_assistant:view",
   ],
 
   secretary: [
@@ -185,6 +189,7 @@ export const ROLE_PERMISSIONS: RolePermissions = {
     "id_cards:view", "id_cards:create", "id_cards:print",
     "payments:view", "payments:create",
     "attendance:view",
+    "ai_assistant:view",
   ],
 
   librarian: [

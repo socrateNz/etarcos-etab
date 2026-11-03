@@ -64,7 +64,6 @@ export async function listDisciplineRecords(
     parsed.data.establishment_id
   );
   if (scope.kind === "none") return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
-  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();

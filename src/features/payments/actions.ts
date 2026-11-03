@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { resolveEstablishmentId, assertEstablishmentOwnership, resolveEstablishmentScope, applyEstablishmentScope, resolveStudentScope, canSeeStudent } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership, resolveEstablishmentScope, applyEstablishmentScope, resolveStudentScope } from "@/lib/auth/active-etab";
 import { computePaymentStatus } from "./calculations";
 
 import { auth } from "@/lib/auth/config";
@@ -175,7 +175,6 @@ export async function listPayments(
     parsed.data.establishment_id
   );
   if (scope.kind === "none") return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
-  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();
@@ -370,37 +369,3 @@ export async function deletePaymentAction(id: string): Promise<ActionResult<void
   }
 }
 
-/**
- * Lecture d'un paiement par id : permission `payments:view`, établissement
- * de l'appelant, et périmètre parent / élève.
- */
-export async function getPaymentByIdAction(
-  id: string
-): Promise<ActionResult<PaymentWithRelations>> {
-  const authResult = await requireAuth("view");
-  if (authResult.error) return { error: authResult.error };
-
-  try {
-    const db = await getDb();
-    const { data } = await db
-      .from("payments")
-      .select("*, student:students(id, student_number, user:users(name)), fee_category:fee_categories(id, name)")
-      .eq("id", id)
-      .maybeSingle();
-    if (!data) return { error: "Paiement introuvable." };
-
-    const estId = await resolveEstablishmentId(
-      authResult.session!.user.establishment_id,
-      data.establishment_id
-    );
-    if (estId !== data.establishment_id) return { error: "Paiement introuvable." };
-
-    if (!canSeeStudent(await resolveStudentScope(), data.student_id)) {
-      return { error: "Paiement introuvable." };
-    }
-
-    return { success: true, data: data as unknown as PaymentWithRelations };
-  } catch {
-    return { error: "Impossible de charger le paiement." };
-  }
-}

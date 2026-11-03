@@ -9,6 +9,13 @@ export const proxy = auth((req) => {
     nextUrl.pathname.startsWith("/login") ||
     nextUrl.pathname.startsWith("/register");
 
+  // Mot de passe oublié : accessible connecté ou non (lien depuis le profil
+  // et depuis l'email de réinitialisation).
+  const isPasswordRecovery =
+    nextUrl.pathname.startsWith("/forgot-password") ||
+    nextUrl.pathname.startsWith("/reset-password");
+  if (isPasswordRecovery) return NextResponse.next();
+
   const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isPublicRoute = nextUrl.pathname === "/";
 

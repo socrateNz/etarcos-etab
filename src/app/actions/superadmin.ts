@@ -210,8 +210,13 @@ export async function listEstablishmentPlans() {
   }
 }
 
+const ESTABLISHMENT_PLANS = ["free", "starter", "professional", "enterprise"] as const;
+
 export async function updateEstablishmentPlan(id: string, plan: string) {
   await requireSuperAdmin();
+  if (!(ESTABLISHMENT_PLANS as readonly string[]).includes(plan)) {
+    return { error: "Formule inconnue." };
+  }
   try {
     const db = await getDb();
     const { error } = await db
@@ -359,6 +364,28 @@ export async function dissociateOwnerAction(ownerId: string, establishmentId: st
     if (error) throw new Error(error.message);
     revalidatePath("/owners");
     return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erreur inattendue." };
+  }
+}
+
+/** Effectifs réels par type de profil, sur toute la plateforme. */
+export async function getPlatformProfileCountsAction() {
+  await requireSuperAdmin();
+  try {
+    const db = await getDb();
+    const count = async (table: "students" | "staff_members" | "parents" | "owners") => {
+      const { count: c, error } = await db.from(table).select("id", { count: "exact", head: true });
+      if (error) throw new Error(error.message);
+      return c ?? 0;
+    };
+    const [students, staff, parents, owners] = await Promise.all([
+      count("students"),
+      count("staff_members"),
+      count("parents"),
+      count("owners"),
+    ]);
+    return { data: { students, staff, parents, owners } };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erreur inattendue." };
   }

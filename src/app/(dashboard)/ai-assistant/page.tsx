@@ -45,7 +45,8 @@ export default function AiAssistantPage() {
       if (content) {
         setMessages(prev => [...prev, { role: "model", content }]);
       } else {
-        setMessages(prev => [...prev, { role: "model", content: "Désolé, je n'ai pas pu générer de réponse pour le moment." }]);
+        const reason = typeof data.error === "string" ? data.error : "Désolé, je n'ai pas pu générer de réponse pour le moment.";
+        setMessages(prev => [...prev, { role: "model", content: reason }]);
       }
     } catch {
       setMessages(prev => [...prev, { role: "model", content: "Erreur de connexion avec le service d'intelligence artificielle." }]);

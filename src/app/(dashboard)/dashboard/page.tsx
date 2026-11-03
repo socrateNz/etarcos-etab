@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { KpiCards } from "@/components/dashboard/kpi-cards";
-import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { RecentActivities } from "@/components/dashboard/recent-activities";
+import { SchoolDashboardWidgets } from "@/components/dashboard/school-dashboard-widgets";
+import { FamilyDashboard } from "@/components/dashboard/family-dashboard";
+import { isStudentScopedRole } from "@/lib/auth/active-etab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SuperAdminDashboard } from "@/components/dashboard/superadmin-dashboard";
 import { OwnerDashboard } from "@/components/dashboard/owner-dashboard";
+import { getSupportStatsAction } from "@/features/support/actions";
 
 export const metadata: Metadata = {
   title: "Tableau de bord",
@@ -32,6 +33,20 @@ export default async function DashboardPage() {
   const session = await auth();
   const isSuperAdmin = session?.user?.role === "super_admin";
   const isOwner = session?.user?.role === "owner";
+  const role = session?.user?.role;
+
+  // Parents et élèves : tableau de bord limité à leurs propres élèves.
+  if (role && isStudentScopedRole(role)) {
+    return (
+      <FamilyDashboard
+        role={role as "parent" | "student"}
+        establishmentId={session?.user?.establishment_id ?? null}
+      />
+    );
+  }
+
+  // Impayés nominatifs : réservés aux rôles ayant accès aux paiements.
+  const canSeeFinance = isSuperAdmin || (session?.user?.permissions ?? []).includes("payments:view");
 
   let establishmentsValue = 0;
   let saasRevenueValue = 0;
@@ -50,6 +65,19 @@ export default async function DashboardPage() {
   let revenueDataList: any[] = [];
   let planDataList: any[] = [];
   let recentActivitiesList: any[] = [];
+  const platformAlerts: { level: "danger" | "warning"; text: string }[] = [];
+  let supportStats: { open: number; pending: number; resolvedToday: number } | null = null;
+  const platformKpis = { paidPlans: 0, blocked: 0, newThisMonth: 0, newLastMonth: 0 };
+
+  // Services configurés (lecture des variables d'environnement, côté serveur).
+  const services = [
+    { name: "Base de données (Supabase)", ok: !!process.env.SUPABASE_SERVICE_ROLE_KEY },
+    { name: "Emails (SMTP)", ok: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) },
+    { name: "Stockage photos (Cloudinary)", ok: !!(process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) },
+    { name: "Assistant IA (Gemini)", ok: !!process.env.GEMINI_API_KEY },
+    { name: "Suivi des erreurs (Sentry)", ok: !!(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN) },
+    { name: "Anti-abus (Upstash)", ok: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) },
+  ];
 
   try {
     const supabase = (await createAdminClient()) as any;
@@ -87,15 +115,47 @@ export default async function DashboardPage() {
       
       const { data: estList } = await supabase
         .from("establishments")
-        .select("name, created_at, id, city, plan")
+        .select("name, created_at, id, city, plan, status")
         .order("created_at", { ascending: false });
+
+      // Alertes calculées à partir des données réelles.
+      if (estList) {
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        for (const e of estList as any[]) {
+          if (e.plan && e.plan !== "free") platformKpis.paidPlans += 1;
+          if (e.status && e.status !== "active") platformKpis.blocked += 1;
+          const created = new Date(e.created_at);
+          if (created >= thisMonth) platformKpis.newThisMonth += 1;
+          else if (created >= lastMonth) platformKpis.newLastMonth += 1;
+        }
+        const blocked = estList.filter((e: any) => e.status && e.status !== "active").length;
+        if (blocked > 0) {
+          platformAlerts.push({ level: "warning", text: `${blocked} établissement(s) non actif(s) (suspendu, inactif ou en attente)` });
+        }
+        const { data: studentEsts } = await supabase.from("students").select("establishment_id");
+        const withStudents = new Set((studentEsts ?? []).map((r: any) => r.establishment_id));
+        const empty = estList.filter(
+          (e: any) => e.id !== "00000000-0000-0000-0000-000000000000" && !withStudents.has(e.id)
+        ).length;
+        if (empty > 0) {
+          platformAlerts.push({ level: "warning", text: `${empty} établissement(s) sans aucun élève inscrit` });
+        }
+      }
+      const missing = services.filter((svc) => !svc.ok);
+      if (missing.length > 0) {
+        platformAlerts.push({ level: "danger", text: `Services non configurés : ${missing.map((m) => m.name).join(", ")}` });
+      }
+
+      const supportRes = await getSupportStatsAction();
+      supportStats = supportRes.data ?? null;
         
       if (estList) {
         recentSchoolsList = estList.slice(0, 5).map((e: any) => ({
           name: e.name,
-          owner: "Administrateur",
-          plan: e.plan || "Gratuit",
-          status: "actif",
+          plan: e.plan || "free",
+          status: e.status || "active",
           date: new Date(e.created_at).toLocaleDateString("fr-FR")
         }));
 
@@ -202,22 +262,26 @@ export default async function DashboardPage() {
       // School-level Dashboard Queries (Isolated Tenant statistics)
       const estId = session.user.establishment_id;
 
-      const { data: dbPayments } = await supabase
-        .from("payments")
-        .select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))")
-        .eq("establishment_id", estId)
-        .eq("status", "partial")
-        .limit(3);
+      const { data: dbPayments } = canSeeFinance
+        ? await supabase
+            .from("payments")
+            .select("id, amount, amount_paid, created_at, due_date, status, student:students(user:users(name), classroom:classrooms(name))")
+            .eq("establishment_id", estId)
+            .in("status", ["pending", "partial", "overdue"])
+            .order("created_at", { ascending: true })
+            .limit(5)
+        : { data: null };
 
       if (dbPayments) {
         schoolPendingPayments = dbPayments.map((p: any) => {
           const amt = Number(p.amount || 0);
           const paid = Number(p.amount_paid || 0);
           return {
+            id: p.id,
             student: p.student?.user?.name || "Élève",
             class: p.student?.classroom?.name || "Sans classe",
             amount: amt - paid,
-            due: p.created_at.split('T')[0]
+            due: (p.due_date || p.created_at).split('T')[0]
           };
         });
       }
@@ -260,6 +324,10 @@ export default async function DashboardPage() {
         revenueData={revenueDataList}
         planData={planDataList}
         recentActivities={recentActivitiesList}
+        services={services}
+        alerts={platformAlerts}
+        supportStats={supportStats}
+        platformKpis={platformKpis}
       />
     );
   }
@@ -271,18 +339,8 @@ export default async function DashboardPage() {
   // Otherwise render standard school dashboard
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      <KpiCards />
-
-      {/* Charts + Activities */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RevenueChart />
-        </div>
-        <div>
-          <RecentActivities />
-        </div>
-      </div>
+      {/* KPI, graphiques et activités (un seul appel à /api/dashboard) */}
+      <SchoolDashboardWidgets />
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -310,6 +368,7 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Pending Payments */}
+        {canSeeFinance && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -329,7 +388,7 @@ export default async function DashboardPage() {
               <div className="space-y-3">
                 {schoolPendingPayments.map((payment) => (
                   <div
-                    key={payment.student}
+                    key={payment.id}
                     className="flex items-start justify-between gap-2"
                   >
                     <div className="min-w-0">
@@ -356,12 +415,13 @@ export default async function DashboardPage() {
             </Link>
           </CardContent>
         </Card>
+        )}
 
         {/* Upcoming Events */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Événements à venir</CardTitle>
-            <CardDescription>Calendrier de juillet 2026</CardDescription>
+            <CardTitle className="text-base">Examens à venir</CardTitle>
+            <CardDescription>Prochaines évaluations planifiées</CardDescription>
           </CardHeader>
           <CardContent>
             {schoolUpcomingEvents.length === 0 ? (
@@ -370,7 +430,7 @@ export default async function DashboardPage() {
               <div className="space-y-3">
                 {schoolUpcomingEvents.map((event) => (
                   <div
-                    key={event.title}
+                    key={`${event.title}-${event.date}`}
                     className="flex items-start gap-3"
                   >
                     <div className="w-10 h-10 rounded-lg bg-muted flex flex-col items-center justify-center text-center flex-shrink-0">

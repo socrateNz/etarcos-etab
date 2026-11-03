@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
 import { GeminiService } from "@/services/ai";
 import type { AIChatRequest } from "@/types/ai";
+import { checkRateLimit } from "@/lib/auth/rate-limit";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -13,6 +14,14 @@ export async function POST(req: Request) {
   const hasAIPermission = session.user.permissions.includes("ai_assistant:view");
   if (!hasAIPermission && session.user.role !== "super_admin") {
     return NextResponse.json({ error: "Habilitation insuffisante pour utiliser l'IA" }, { status: 403 });
+  }
+
+  const { allowed } = await checkRateLimit("ai", session.user.id);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Limite d'utilisation de l'assistant atteinte. Réessayez dans une heure." },
+      { status: 429 }
+    );
   }
 
   let body: { action?: unknown; payload?: { messages?: unknown } };
@@ -32,16 +41,6 @@ export async function POST(req: Request) {
       // Le détail technique de l'erreur reste côté serveur (logs + Sentry).
       return NextResponse.json({ message: res.message, configured: res.configured });
     }
-
-    // Analyses de classe / prédictions par élève : pas encore branchées sur
-    // les données réelles. Elles renvoyaient auparavant des chiffres codés en
-    // dur — on refuse explicitement plutôt que d'afficher de fausses analyses.
-    case "analyze_classroom":
-    case "predict_student":
-      return NextResponse.json(
-        { error: "Fonctionnalité non disponible pour le moment." },
-        { status: 501 }
-      );
 
     default:
       return NextResponse.json({ error: "Action inconnue" }, { status: 400 });

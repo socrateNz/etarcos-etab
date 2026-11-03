@@ -12,6 +12,12 @@ const BUCKETS = {
   register: { limit: 3, window: "1 h" },
   /** Téléversements de fichiers — identifiant : id utilisateur. */
   upload: { limit: 30, window: "10 m" },
+  /** Demandes « mot de passe oublié » — identifiant : `ip:email`. */
+  password_reset: { limit: 3, window: "15 m" },
+  /** Changement de mot de passe depuis le profil — identifiant : id utilisateur. */
+  password_change: { limit: 5, window: "15 m" },
+  /** Messages à l'assistant IA (coût Gemini) — identifiant : id utilisateur. */
+  ai: { limit: 40, window: "1 h" },
 } as const satisfies Record<string, { limit: number; window: `${number} ${"s" | "m" | "h"}` }>;
 
 export type RateLimitBucket = keyof typeof BUCKETS;

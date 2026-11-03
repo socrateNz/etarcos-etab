@@ -42,22 +42,22 @@ interface SchoolPlan {
   name: string;
   slug: string;
   status: string;
-  plan: "free" | "pro" | "premium" | "enterprise";
+  plan: "free" | "starter" | "professional" | "enterprise";
   logo_url: string | null;
   created_at: string;
 }
 
 const planColors: Record<string, string> = {
   free: "bg-slate-500/10 text-slate-500 border-slate-500/20",
-  pro: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  premium: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  starter: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  professional: "bg-purple-500/10 text-purple-500 border-purple-500/20",
   enterprise: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
 const planLabels: Record<string, string> = {
   free: "Gratuit (Free)",
-  pro: "Professionnel (Pro)",
-  premium: "Premium",
+  starter: "Starter",
+  professional: "Professionnel",
   enterprise: "Entreprise (Custom)",
 };
 
@@ -180,8 +180,11 @@ export default function SettingsPage() {
 
     const res = await updateEstablishmentPlan(selectedSchool.id, newPlan);
     if (res.success) {
+      toast.success("Formule mise à jour");
       setSelectedSchool(null);
       fetchSchools();
+    } else {
+      toast.error("Formule inchangée", { description: res.error });
     }
     setSavingPlan(false);
   };
@@ -472,6 +475,39 @@ export default function SettingsPage() {
               </Button>
               <Button type="submit" disabled={savingYear}>
                 {savingYear && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Enregistrer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedSchool} onOpenChange={(open) => { if (!open) setSelectedSchool(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifier la formule</DialogTitle>
+            <DialogDescription>{selectedSchool?.name}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdatePlanSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="school-plan">Formule</Label>
+              <select
+                id="school-plan"
+                value={newPlan}
+                onChange={(e) => setNewPlan(e.target.value)}
+                className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+              >
+                {Object.entries(planLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setSelectedSchool(null)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={savingPlan}>
+                {savingPlan && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Enregistrer
               </Button>
             </DialogFooter>

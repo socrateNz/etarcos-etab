@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend
@@ -8,8 +7,8 @@ import {
 import Link from "next/link";
 import {
   School, Users, Landmark, CreditCard, TrendingUp, ShieldAlert,
-  AlertTriangle, CheckCircle2, Play, Activity, HelpCircle, Sparkles,
-  Calendar, ArrowUpRight, Plus, UserPlus, Megaphone, Settings, FileText,
+  AlertTriangle, CheckCircle2, HelpCircle,
+  Plus, UserPlus, Megaphone, Settings,
   GraduationCap, Package
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +34,10 @@ interface SuperAdminDashboardProps {
   revenueData?: { name: string; r: number }[];
   planData?: { name: string; value: number }[];
   recentActivities?: { id: any; text: string; time: string; status: string }[];
+  services?: { name: string; ok: boolean }[];
+  alerts?: { level: "danger" | "warning"; text: string }[];
+  supportStats?: { open: number; pending: number; resolvedToday: number } | null;
+  platformKpis?: { paidPlans: number; blocked: number; newThisMonth: number; newLastMonth: number };
 }
 
 export function SuperAdminDashboard({
@@ -44,7 +47,11 @@ export function SuperAdminDashboard({
   newUsersData = [],
   revenueData = [],
   planData = [],
-  recentActivities = []
+  recentActivities = [],
+  services = [],
+  alerts = [],
+  supportStats = null,
+  platformKpis = { paidPlans: 0, blocked: 0, newThisMonth: 0, newLastMonth: 0 },
 }: SuperAdminDashboardProps) {
   // Use database real values exactly (no mock baselines)
   const totalEst = stats.establishments;
@@ -139,7 +146,7 @@ export function SuperAdminDashboard({
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Revenus du mois</CardTitle>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Frais encaissés</CardTitle>
               <p className="text-2xl font-bold mt-1 text-emerald-500">{formatCurrency(totalRev)}</p>
             </div>
             <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
@@ -147,52 +154,52 @@ export function SuperAdminDashboard({
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">Revenu Mensuel Récurrent (MRR)</p>
+            <p className="text-xs text-muted-foreground">Total des paiements saisis par les écoles</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Croissance</CardTitle>
-              <p className="text-2xl font-bold mt-1 text-brand-400">+18.0 %</p>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Nouveaux établissements</CardTitle>
+              <p className="text-2xl font-bold mt-1 text-brand-400">{platformKpis.newThisMonth}</p>
             </div>
             <div className="w-9 h-9 rounded-lg bg-brand-500/10 flex items-center justify-center text-brand-400">
               <TrendingUp className="w-5 h-5" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">Nouveaux abonnés vs mois dernier</p>
+            <p className="text-xs text-muted-foreground">Ce mois-ci ({platformKpis.newLastMonth} le mois dernier)</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Abonnements actifs</CardTitle>
-              <p className="text-2xl font-bold mt-1">210</p>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Formules payantes</CardTitle>
+              <p className="text-2xl font-bold mt-1">{platformKpis.paidPlans}</p>
             </div>
             <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400">
               <Package className="w-5 h-5" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">Formules Starter / Pro / Enterprise</p>
+            <p className="text-xs text-muted-foreground">Starter / Professionnel / Entreprise</p>
           </CardContent>
         </Card>
 
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Abonnements expirés</CardTitle>
-              <p className="text-2xl font-bold mt-1 text-destructive">35</p>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Établissements non actifs</CardTitle>
+              <p className="text-2xl font-bold mt-1 text-destructive">{platformKpis.blocked}</p>
             </div>
             <div className="w-9 h-9 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive">
               <AlertTriangle className="w-5 h-5" />
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">Comptes bloqués ou en attente</p>
+            <p className="text-xs text-muted-foreground">Suspendus, inactifs ou en attente</p>
           </CardContent>
         </Card>
       </div>
@@ -305,62 +312,48 @@ export function SuperAdminDashboard({
         {/* Platform Status */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Santé de la plateforme</CardTitle>
-            <CardDescription>Statut opérationnel de l'infrastructure SaaS</CardDescription>
+            <CardTitle className="text-base">Services de la plateforme</CardTitle>
+            <CardDescription>Configuration détectée sur le serveur</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">API Gateway :</span>
-                <span className="font-semibold text-emerald-500">99.98% (Normal)</span>
+          <CardContent className="space-y-3 text-sm">
+            {services.map((svc) => (
+              <div key={svc.name} className="flex justify-between items-center gap-2">
+                <span className="text-muted-foreground">{svc.name}</span>
+                {svc.ok ? (
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-0">Configuré</Badge>
+                ) : (
+                  <Badge className="bg-destructive/20 text-destructive border-0">Manquant</Badge>
+                )}
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Base de données (Supabase) :</span>
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-0">Opérationnel</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Stockage (Cloudinary) :</span>
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-0">Opérationnel</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Espace Stockage :</span>
-                <span className="font-semibold text-amber-500">78 %</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Temps de réponse moyen :</span>
-                <span className="font-semibold text-foreground">142 ms</span>
-              </div>
-            </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Row 6: Alerts & Support tickets & AI */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Alerts Card */}
-        <Card className="border-red-500/20 bg-red-500/[0.02]">
+      {/* Row 6: Alertes & support */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className={alerts.length > 0 ? "border-red-500/20 bg-red-500/[0.02]" : undefined}>
           <CardHeader>
-            <CardTitle className="text-base text-red-400 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-500" /> Alertes système
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className={alerts.length > 0 ? "w-5 h-5 text-red-500" : "w-5 h-5 text-muted-foreground"} /> Alertes
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-start gap-2 text-destructive">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              <p>12 abonnements expirent bientôt (sous 7 jours)</p>
-            </div>
-            <div className="flex items-start gap-2 text-amber-500">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              <p>5 établissements sont restés inactifs ce mois</p>
-            </div>
-            <div className="flex items-start gap-2 text-destructive">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              <p>2 sauvegardes de base de données ont échoué</p>
-            </div>
+            {alerts.length === 0 ? (
+              <p className="flex items-center gap-2 text-emerald-500">
+                <CheckCircle2 className="w-4 h-4" /> Aucune alerte.
+              </p>
+            ) : (
+              alerts.map((a) => (
+                <div key={a.text} className={a.level === "danger" ? "flex items-start gap-2 text-destructive" : "flex items-start gap-2 text-amber-500"}>
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>{a.text}</p>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
-        {/* Support Tickets */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -368,72 +361,33 @@ export function SuperAdminDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ouverts :</span>
-              <Badge variant="destructive">15 tickets</Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">En cours de traitement :</span>
-              <Badge variant="secondary">7 tickets</Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Résolus aujourd'hui :</span>
-              <span className="font-semibold text-emerald-500">32 résolus</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* AI Usage */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-violet-400" /> Utilisation Assistant IA
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Requêtes ce mois :</span>
-              <span className="font-semibold text-foreground">12 450 appels</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Quota Restant :</span>
-              <span className="font-semibold text-brand-400">87.5 %</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Temps de réponse IA :</span>
-              <span className="font-semibold text-foreground">1.8s</span>
-            </div>
+            {supportStats ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">À traiter :</span>
+                  <Badge variant={supportStats.open > 0 ? "destructive" : "secondary"}>{supportStats.open}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">En attente du client :</span>
+                  <Badge variant="secondary">{supportStats.pending}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Résolus aujourd&apos;hui :</span>
+                  <span className="font-semibold text-emerald-500">{supportStats.resolvedToday}</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Support indisponible (migration 009 à appliquer).</p>
+            )}
+            <Link href="/support" className="block">
+              <Button variant="outline" size="sm" className="w-full mt-2">Ouvrir le support</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
 
-      {/* Row 7: Calendar & Activities & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar Events */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-brand-400" /> Événements & Calendrier
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex gap-3">
-              <div className="text-brand-400 font-bold text-xs uppercase leading-none mt-1">Juil 05</div>
-              <div>
-                <p className="font-medium text-foreground">Renouvellement abonnements de groupe</p>
-                <p className="text-xs text-muted-foreground">Secteur Douala</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="text-brand-400 font-bold text-xs uppercase leading-none mt-1">Juil 12</div>
-              <div>
-                <p className="font-medium text-foreground">Maintenance des serveurs Supabase</p>
-                <p className="text-xs text-muted-foreground">Dimanche 02h00 - 04h00</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+      {/* Row 7: Activities & Quick Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activities */}
         <Card>
           <CardHeader>

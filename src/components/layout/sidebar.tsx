@@ -275,6 +275,7 @@ const DIRECTOR_NAV = [
       { key: "dir-rep", label: "Rapports & Bilans", path: "/reports", icon: BarChart3 },
       { key: "dir-ai", label: "Assistant IA", path: "/ai-assistant", icon: Sparkles },
       { key: "dir-sett", label: "Paramètres", path: "/settings", icon: Settings },
+      { key: "dir-supp", label: "Support", path: "/support", icon: HelpCircle },
     ]
   }
 ];

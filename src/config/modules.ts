@@ -349,11 +349,11 @@ export const MODULES: ModuleConfig[] = [
     icon: "Sparkles",
     path: "/ai-assistant",
     group: "reports",
-    roles: ["super_admin", "owner", "director"],
+    roles: ["super_admin", "owner", "director", "censor", "teacher", "secretary"],
     actions: ["view"],
-    isImplemented: false,
+    isImplemented: true,
     isNew: true,
-    badge: "Bientôt",
+    badge: "Bêta",
   },
 
   // ========== SYSTEM ==========
