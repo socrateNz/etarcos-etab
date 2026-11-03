@@ -1,10 +1,9 @@
 "use server";
 
 import { signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "@/lib/auth/config";
-import { createAdminClient } from "@/lib/supabase/server";
 import { loginSchema, registerSchema, LoginInput, RegisterInput } from "@/schemas/auth";
 import { headers } from "next/headers";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import * as Sentry from "@sentry/nextjs";
 import { checkRateLimit, getClientIp } from "@/lib/auth/rate-limit";
@@ -76,7 +75,22 @@ export async function registerAction(values: RegisterInput) {
   const email = validatedFields.data.email.trim().toLowerCase();
   const { password } = validatedFields.data;
 
-  const supabase = (await createAdminClient()) as unknown as SupabaseClient<Database>;
+  // Deux clients sans état (aucun cookie, aucune session persistée) :
+  // - authClient (clé anon) pour signUp, qui peut ouvrir une session ;
+  // - supabase (service_role) pour les écritures, jamais affecté par cette session.
+  // Faire signUp sur le client admin lié aux cookies ferait partir les requêtes
+  // suivantes avec le JWT du nouvel utilisateur → bloquées par RLS.
+  const noSession = { auth: { persistSession: false, autoRefreshToken: false } };
+  const authClient = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    noSession
+  );
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    noSession
+  );
   let userId: string | null = null;
   let ownerId: string | null = null;
 
@@ -90,7 +104,7 @@ export async function registerAction(values: RegisterInput) {
 
   try {
     // 1. Compte Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+    const { data: authData, error: authError } = await authClient.auth.signUp({ email, password });
     if (authError || !authData.user) {
       return { error: REGISTER_FAILED };
     }
