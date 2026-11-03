@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership, resolveEstablishmentScope, applyEstablishmentScope } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -68,10 +68,13 @@ export async function listLessons(
   if (!parsed.success) return { error: "Paramètres de recherche invalides." };
 
   const { classroom_id, teacher_id, room_id } = parsed.data;
-  const estId = await resolveEstablishmentId(
+  // Périmètre de lecture : jamais « toutes les écoles » par défaut (cf. resolveEstablishmentScope).
+  const scope = await resolveEstablishmentScope(
     authResult.session!.user.establishment_id,
     parsed.data.establishment_id
   );
+  if (scope.kind === "none") return { success: true, data: [] };
+  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();
@@ -79,7 +82,7 @@ export async function listLessons(
       .from("lessons")
       .select("*, classroom:classrooms(id, name), subject:subjects(id, name, code, color), teacher:users(id, name, email), room:rooms(id, name)");
 
-    if (estId) query = query.eq("establishment_id", estId);
+    query = applyEstablishmentScope(query, scope);
     if (classroom_id) query = query.eq("classroom_id", classroom_id);
     if (teacher_id) query = query.eq("teacher_id", teacher_id);
     if (room_id) query = query.eq("room_id", room_id);

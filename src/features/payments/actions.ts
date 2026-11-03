@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership, resolveEstablishmentScope, applyEstablishmentScope, resolveStudentScope, canSeeStudent } from "@/lib/auth/active-etab";
 import { computePaymentStatus } from "./calculations";
 
 import { auth } from "@/lib/auth/config";
@@ -169,10 +169,13 @@ export async function listPayments(
   if (!parsed.success) return { error: "Paramètres de recherche invalides." };
 
   const { page, per_page, search, sort_by, sort_order, student_id, status } = parsed.data;
-  const estId = await resolveEstablishmentId(
+  // Périmètre de lecture : jamais « toutes les écoles » par défaut (cf. resolveEstablishmentScope).
+  const scope = await resolveEstablishmentScope(
     authResult.session!.user.establishment_id,
     parsed.data.establishment_id
   );
+  if (scope.kind === "none") return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
+  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();
@@ -180,7 +183,14 @@ export async function listPayments(
       .from("payments")
       .select("*, student:students(id, student_number, user:users(name), classroom:classrooms(id, name)), fee_category:fee_categories(id, name), creator:users(id, name)", { count: "exact" });
 
-    if (estId) query = query.eq("establishment_id", estId);
+    query = applyEstablishmentScope(query, scope);
+
+    // Parent / élève : uniquement leurs propres élèves.
+    const studentScope = await resolveStudentScope();
+    if (studentScope.kind === "ids") {
+      if (studentScope.ids.length === 0) return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
+      query = query.in("student_id", studentScope.ids);
+    }
     if (student_id) query = query.eq("student_id", student_id);
     if (status) query = query.eq("status", status);
 
@@ -357,5 +367,40 @@ export async function deletePaymentAction(id: string): Promise<ActionResult<void
     return { success: true };
   } catch {
     return { error: "Erreur lors de l'annulation du versement." };
+  }
+}
+
+/**
+ * Lecture d'un paiement par id : permission `payments:view`, établissement
+ * de l'appelant, et périmètre parent / élève.
+ */
+export async function getPaymentByIdAction(
+  id: string
+): Promise<ActionResult<PaymentWithRelations>> {
+  const authResult = await requireAuth("view");
+  if (authResult.error) return { error: authResult.error };
+
+  try {
+    const db = await getDb();
+    const { data } = await db
+      .from("payments")
+      .select("*, student:students(id, student_number, user:users(name)), fee_category:fee_categories(id, name)")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return { error: "Paiement introuvable." };
+
+    const estId = await resolveEstablishmentId(
+      authResult.session!.user.establishment_id,
+      data.establishment_id
+    );
+    if (estId !== data.establishment_id) return { error: "Paiement introuvable." };
+
+    if (!canSeeStudent(await resolveStudentScope(), data.student_id)) {
+      return { error: "Paiement introuvable." };
+    }
+
+    return { success: true, data: data as unknown as PaymentWithRelations };
+  } catch {
+    return { error: "Impossible de charger le paiement." };
   }
 }

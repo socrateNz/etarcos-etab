@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, assertEstablishmentOwnership, resolveEstablishmentScope, applyEstablishmentScope } from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -58,10 +58,13 @@ export async function listExams(
   if (!parsed.success) return { error: "Paramètres invalides." };
 
   const { page, per_page, search, sort_by, sort_order, classroom_id, subject_id } = parsed.data;
-  const estId = await resolveEstablishmentId(
+  // Périmètre de lecture : jamais « toutes les écoles » par défaut (cf. resolveEstablishmentScope).
+  const scope = await resolveEstablishmentScope(
     authResult.session!.user.establishment_id,
     parsed.data.establishment_id
   );
+  if (scope.kind === "none") return { success: true, data: { data: [], total: 0, page: parsed.data.page, per_page: parsed.data.per_page, total_pages: 0 } };
+  const estId = scope.kind === "ids" && scope.ids.length === 1 ? scope.ids[0] : null;
 
   try {
     const db = await getDb();
@@ -69,7 +72,7 @@ export async function listExams(
       .from("exams")
       .select("*, classroom:classrooms(id, name), subject:subjects(id, name, code), room:rooms(id, name)", { count: "exact" });
 
-    if (estId) query = query.eq("establishment_id", estId);
+    query = applyEstablishmentScope(query, scope);
     if (classroom_id) query = query.eq("classroom_id", classroom_id);
     if (subject_id) query = query.eq("subject_id", subject_id);
 

@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, isStudentScopedRole } from "@/lib/auth/active-etab";
 
 export async function GET() {
   const session = await auth();
@@ -16,6 +16,16 @@ export async function GET() {
       return NextResponse.json({ error: "Aucun établissement associé à votre compte." }, { status: 400 });
     }
 
+    // Statistiques de toute l'école : réservées au personnel. Les parents et
+    // élèves y voyaient le chiffre d'affaires et les impayés nominatifs.
+    const role = session.user.role;
+    if (isStudentScopedRole(role)) {
+      return NextResponse.json({ error: "Tableau de bord réservé au personnel." }, { status: 403 });
+    }
+    // Données financières : uniquement avec la permission payments:view
+    // (un enseignant, par exemple, ne doit pas voir les paiements).
+    const canSeeFinance = role === "super_admin" || session.user.permissions.includes("payments:view");
+
     // 1. Fetch counts from database
     const { count: studentCount } = await supabase
       .from("students")
@@ -28,10 +38,12 @@ export async function GET() {
       .eq("establishment_id", estId);
 
     // 2. Fetch monthly payments sum
-    const { data: payments } = await supabase
-      .from("payments")
-      .select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))")
-      .eq("establishment_id", estId);
+    const { data: payments } = canSeeFinance
+      ? await supabase
+          .from("payments")
+          .select("amount, amount_paid, created_at, status, student:students(user:users(name), classroom:classrooms(name))")
+          .eq("establishment_id", estId)
+      : { data: [] as any[] };
 
     const totalPayments = payments?.reduce((acc: number, p: any) => acc + Number(p.amount_paid || 0), 0) || 0;
 
@@ -43,12 +55,14 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(5);
 
-    const { data: recentPayments } = await supabase
-      .from("payments")
-      .select("amount_paid, created_at, student:students(user:users(name))")
-      .eq("establishment_id", estId)
-      .order("created_at", { ascending: false })
-      .limit(5);
+    const { data: recentPayments } = canSeeFinance
+      ? await supabase
+          .from("payments")
+          .select("amount_paid, created_at, student:students(user:users(name))")
+          .eq("establishment_id", estId)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : { data: [] as any[] };
 
     const dbActivities: any[] = [];
     if (recentStudents) {
@@ -135,7 +149,7 @@ export async function GET() {
     return NextResponse.json({
       kpis: [
         { title: "Total Élèves", value: studentCount || 0, trend: 0, subtitle: "Inscrits cette année", color: "brand" },
-        { title: "Revenus du mois", value: totalPayments, trend: 0, subtitle: "Total reçu", color: "success" },
+        { title: "Revenus du mois", value: canSeeFinance ? totalPayments : "—", trend: 0, subtitle: canSeeFinance ? "Total reçu" : "Accès réservé", color: "success" },
         { title: "Personnel actif", value: staffCount || 0, trend: 0, subtitle: "Enseignants & Admin", color: "violet" },
         { title: "Moyenne générale", value: overallAvg === "N/A" ? "N/A" : `${overallAvg}/20`, trend: 0, subtitle: overallAvg === "N/A" ? "Aucune note enregistrée" : "Notes saisies", color: "cyan" },
       ],

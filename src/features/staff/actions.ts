@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, resolveEstablishmentScope, applyEstablishmentScope } from "@/lib/auth/active-etab";
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
@@ -49,7 +49,6 @@ async function getDb(): Promise<SupabaseClient<Database>> {
 
 // ========== STAFF MEMBERS ==========
 
-import { listOwnerEstablishmentsAction } from "@/features/users/actions";
 
 export async function listStaff(
   input: Partial<ListStaffInput> = {}
@@ -61,10 +60,15 @@ export async function listStaff(
   if (!parsed.success) return { error: "Paramètres invalides." };
 
   const { page, per_page, search, sort_by, sort_order, position, department } = parsed.data;
-  const estId = await resolveEstablishmentId(
+  // Périmètre de lecture : propriétaire sans établissement actif → tous les
+  // siens ; autres rôles → leur établissement ; jamais « toutes les écoles ».
+  const scope = await resolveEstablishmentScope(
     authResult.session!.user.establishment_id,
     parsed.data.establishment_id
   );
+  if (scope.kind === "none") {
+    return { success: true, data: { data: [], total: 0, page, per_page, total_pages: 0 } };
+  }
 
   try {
     const db = await getDb();
@@ -72,21 +76,7 @@ export async function listStaff(
       .from("staff_members")
       .select("*, user:users(*)", { count: "exact" });
 
-    if (authResult.session!.user.role === "owner") {
-      const etabRes = await listOwnerEstablishmentsAction();
-      const etabIds = (etabRes.data ?? []).map((e: any) => e.id);
-      if (etabIds.length > 0) {
-        if (estId) {
-          query = query.eq("establishment_id", estId);
-        } else {
-          query = query.in("establishment_id", etabIds);
-        }
-      } else {
-        return { success: true, data: { data: [], total: 0, page: 1, per_page: 50, total_pages: 0 } };
-      }
-    } else if (estId) {
-      query = query.eq("establishment_id", estId);
-    }
+    query = applyEstablishmentScope(query, scope);
 
     if (position) query = query.eq("position", position);
     if (department) query = query.eq("department", department);

@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth/config";
 import { createAdminClient } from "@/lib/supabase/server";
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { applyEstablishmentScope, resolveEstablishmentScope } from "@/lib/auth/active-etab";
 
 async function requireOwnerOrAdmin() {
   const session = await auth();
@@ -43,13 +43,18 @@ export async function getOwnerDashboardData(
   }
 
   // Determine active target IDs for queries
+  // Les ids viennent du client : on ne garde que ceux que l'appelant possède
+  // (sinon un propriétaire pouvait consulter les stats de n'importe quelle école).
+  const owned = new Set(ownedIds);
+  const keepOwned = (ids: string[]) => ids.filter((id) => owned.has(id));
+
   let targetIds: string[] = [];
   if (mode === "global") {
     targetIds = ownedIds;
   } else if (mode === "single" && selectedId) {
-    targetIds = [selectedId];
+    targetIds = keepOwned([selectedId]);
   } else if (mode === "compare") {
-    targetIds = compareIds.length > 0 ? compareIds : ownedIds;
+    targetIds = compareIds.length > 0 ? keepOwned(compareIds) : ownedIds;
   }
 
   if (targetIds.length === 0) {
@@ -395,16 +400,18 @@ export async function getAccountingPageData() {
   const session = await requireOwnerOrAdmin();
   const db = (await createAdminClient()) as any;
 
-  const estId = await resolveEstablishmentId(
-    session.user.establishment_id
-  );
+  const scope = await resolveEstablishmentScope(session.user.establishment_id);
 
   let queryPayments = db.from("payments").select("amount, amount_paid, created_at, status, student:students(user:users(name)), fee_category:fee_categories(name)");
   let queryExpenses = db.from("expenses").select("amount, created_at, category, description");
 
-  if (estId) {
-    queryPayments = queryPayments.eq("establishment_id", estId);
-    queryExpenses = queryExpenses.eq("establishment_id", estId);
+  if (scope.kind === "none") {
+    // Aucun établissement accessible : pas de requête « sans filtre ».
+    queryPayments = queryPayments.limit(0);
+    queryExpenses = queryExpenses.limit(0);
+  } else {
+    queryPayments = applyEstablishmentScope(queryPayments, scope);
+    queryExpenses = applyEstablishmentScope(queryExpenses, scope);
   }
 
   const [paymentsRes, expensesRes] = await Promise.all([

@@ -1,6 +1,6 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import { resolveEstablishmentId, isStudentScopedRole } from "@/lib/auth/active-etab";
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
@@ -240,6 +240,11 @@ export async function listLoansAction(
 
     if (activeOnly) {
       query = query.is("return_date", null);
+    }
+
+    // Élève / parent : uniquement ses propres emprunts (borrower_id → users).
+    if (isStudentScopedRole(authResult.session!.user.role)) {
+      query = query.eq("borrower_id", authResult.session!.user.id);
     }
 
     const { data, error } = await query;

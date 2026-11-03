@@ -2,7 +2,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { resolveEstablishmentId, assertEstablishmentOwnership } from "@/lib/auth/active-etab";
+import {
+  resolveEstablishmentId,
+  assertEstablishmentOwnership,
+  resolveStudentScope,
+  canSeeStudent,
+  filterRowsByStudentScope,
+} from "@/lib/auth/active-etab";
 import { computeWeightedAverage, averageToMention, averageToAppreciation, type GradeForAverage } from "./calculations";
 import { resolveActiveAcademicYearId } from "@/app/actions/academic-years";
 import { auth } from "@/lib/auth/config";
@@ -91,6 +97,7 @@ export async function getGradesMatrixAction(
     const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .eq("status", "active")
       .order("student_number");
@@ -127,12 +134,15 @@ export async function getGradesMatrixAction(
       };
     });
 
+    // Parent / élève : uniquement ses propres lignes.
+    const studentScope = await resolveStudentScope();
+
     return {
       success: true,
       data: {
         coefficient,
         max_value,
-        students: studentList,
+        students: filterRowsByStudentScope(studentList, studentScope),
       },
     };
   } catch {
@@ -165,6 +175,7 @@ export async function fetchClassroomGradesAction(
     const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .order("student_number");
 
@@ -174,6 +185,7 @@ export async function fetchClassroomGradesAction(
     const { data: existingGrades } = await db
       .from("grades")
       .select("*, student:students(id, student_number, user:users(name))")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .eq("subject_id", subjectId)
       .eq("period", period)
@@ -213,7 +225,8 @@ export async function fetchClassroomGradesAction(
       } as any;
     });
 
-    return { success: true, data: result };
+    const studentScope = await resolveStudentScope();
+    return { success: true, data: filterRowsByStudentScope(result, studentScope) };
   } catch {
     return { error: "Impossible de charger les élèves de la classe." };
   }
@@ -360,6 +373,7 @@ export async function getClassroomOverallAveragesAction(
     const { count: studentCount } = await db
       .from("students")
       .select("id", { count: "exact", head: true })
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .eq("status", "active");
 
@@ -400,6 +414,7 @@ export async function getClassroomAveragesAction(
     authResult.session!.user.establishment_id,
     establishmentId
   );
+  if (!estId) return { error: "Établissement requis." };
 
   try {
     const db = await getDb();
@@ -411,6 +426,7 @@ export async function getClassroomAveragesAction(
     const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId);
 
     if (studErr) return { error: studErr.message };
@@ -424,6 +440,7 @@ export async function getClassroomAveragesAction(
     let gradesQuery = db
       .from("grades")
       .select("student_id, value, max_value, coefficient, period")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .in("student_id", studentIds);
 
@@ -477,7 +494,9 @@ export async function getClassroomAveragesAction(
       r.rank = r.average !== null ? i + 1 : null;
     });
 
-    return { success: true, data: results };
+    // Rang calculé sur toute la classe ; parent / élève ne reçoit que ses lignes.
+    const studentScope = await resolveStudentScope();
+    return { success: true, data: filterRowsByStudentScope(results, studentScope) };
   } catch {
     return { error: "Erreur lors du calcul des moyennes de la classe." };
   }
@@ -534,9 +553,25 @@ export async function getStudentReportCardDetailsAction(
     authResult.session!.user.establishment_id,
     establishmentId
   );
+  if (!estId) return { error: "Établissement requis." };
+
+  // Parent / élève : uniquement le bulletin de ses propres enfants / de lui-même.
+  const studentScope = await resolveStudentScope();
+  if (!canSeeStudent(studentScope, studentId)) {
+    return { error: "Vous n'avez pas accès à ce bulletin." };
+  }
 
   try {
     const db = await getDb();
+
+    // L'élève doit appartenir à l'établissement résolu.
+    const { data: target } = await db
+      .from("students")
+      .select("id")
+      .eq("id", studentId)
+      .eq("establishment_id", estId)
+      .maybeSingle();
+    if (!target) return { error: "Élève introuvable." };
 
     const activeYearId = await resolveActiveAcademicYearId(db, estId);
     if (!activeYearId) return { error: "Aucune année académique active." };
@@ -545,6 +580,7 @@ export async function getStudentReportCardDetailsAction(
     const { data: classroomStudents } = await db
       .from("students")
       .select("id")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId);
 
     const studentIds = (classroomStudents ?? []).map((s: any) => s.id);
@@ -554,6 +590,7 @@ export async function getStudentReportCardDetailsAction(
     let gradesQuery = db
       .from("grades")
       .select("student_id, subject_id, value, max_value, coefficient, period")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .in("student_id", studentIds);
 

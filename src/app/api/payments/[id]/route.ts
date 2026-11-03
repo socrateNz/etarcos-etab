@@ -1,94 +1,81 @@
-import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import {
+  getPaymentByIdAction,
+  updatePaymentAction,
+  deletePaymentAction,
+} from "@/features/payments/actions";
+
+// Toutes les opérations passent par les Server Actions, qui vérifient la
+// permission (payments:view/edit/delete), l'établissement de l'appelant et le
+// périmètre parent / élève. Ces routes ne vérifiaient auparavant que la
+// connexion : n'importe quel compte pouvait lire, modifier (ex. passer en
+// « payé ») ou supprimer n'importe quel paiement de n'importe quelle école.
+
+function statusFor(error: string): number {
+  if (error === "Non autorisé.") return 401;
+  if (error === "Permission refusée." || error.startsWith("Vous n'avez pas accès")) return 403;
+  if (error.includes("introuvable")) return 404;
+  return 400;
+}
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
-  // Get payment receipt by ID
-  try {
-    const supabase = (await createAdminClient()) as any;
-    const { data, error } = await supabase
-      .from("payments")
-      .select("id, amount, amount_paid, payment_date, payment_method, status, notes, student:students(user:users(name)), fee_category:fee_categories(name)")
-      .eq("id", id)
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({
-      data: {
-        id: data.id,
-        student: data.student?.user?.name || "Élève inconnu",
-        fee: data.fee_category?.name || "Frais scolaires",
-        amount: Number(data.amount || 0),
-        amount_paid: Number(data.amount_paid || 0),
-        date: data.payment_date || data.created_at.split('T')[0],
-        method: data.payment_method || "cash",
-        status: data.status,
-        notes: data.notes,
-      }
-    });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
+  const res = await getPaymentByIdAction(id);
+  if (res.error || !res.data) {
+    const error = res.error ?? "Paiement introuvable.";
+    return NextResponse.json({ error }, { status: statusFor(error) });
   }
+
+  const p = res.data;
+  return NextResponse.json({
+    data: {
+      id: p.id,
+      student: p.student?.user?.name || "Élève inconnu",
+      fee: p.fee_category?.name || "Frais scolaires",
+      amount: Number(p.amount || 0),
+      amount_paid: Number(p.amount_paid || 0),
+      date: p.payment_date || p.created_at.split("T")[0],
+      method: p.payment_method || "cash",
+      status: p.status,
+      notes: p.notes,
+    },
+  });
 }
 
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
+
+  let body: Record<string, unknown>;
   try {
-    const body = await req.json();
-    const { amount_paid, payment_method, notes, status } = body;
-
-    const supabase = (await createAdminClient()) as any;
-    const { data, error } = await supabase
-      .from("payments")
-      .update({ amount_paid, payment_method, notes, status } as any)
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({ success: true, data });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Corps de requête JSON invalide" }, { status: 400 });
   }
+
+  // Validé par updatePaymentSchema dans l'action.
+  const res = await updatePaymentAction(id, {
+    amount_paid: body.amount_paid as number,
+    payment_method: body.payment_method as never,
+    status: body.status as never,
+    notes: (body.notes as string | null | undefined) ?? null,
+  });
+
+  if (res.error) return NextResponse.json({ error: res.error }, { status: statusFor(res.error) });
+  return NextResponse.json({ success: true, data: res.data });
 }
 
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
-  try {
-    const supabase = (await createAdminClient()) as any;
-    const { error } = await supabase
-      .from("payments")
-      .delete()
-      .eq("id", id);
-
-    if (error) throw error;
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
-  }
+  const res = await deletePaymentAction(id);
+  if (res.error) return NextResponse.json({ error: res.error }, { status: statusFor(res.error) });
+  return NextResponse.json({ success: true });
 }

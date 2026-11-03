@@ -1,6 +1,11 @@
 "use server";
 
-import { resolveEstablishmentId } from "@/lib/auth/active-etab";
+import {
+  resolveEstablishmentId,
+  resolveStudentScope,
+  canSeeStudent,
+  filterRowsByStudentScope,
+} from "@/lib/auth/active-etab";
 
 import { auth } from "@/lib/auth/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -247,15 +252,21 @@ export async function fetchClassroomAttendanceAction(
     const { data: existing, error: fetchErr } = await query;
     if (fetchErr) return { error: fetchErr.message };
 
+    const studentScope = await resolveStudentScope();
+
     // If records already exist, return them
     if (existing && existing.length > 0) {
-      return { success: true, data: existing as AttendanceWithRelations[] };
+      return {
+        success: true,
+        data: filterRowsByStudentScope(existing as AttendanceWithRelations[], studentScope),
+      };
     }
 
     // 2. If no records exist, fetch active classroom students to register fresh
     const { data: students, error: studentsErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .eq("status", "active");
 
@@ -288,7 +299,7 @@ export async function fetchClassroomAttendanceAction(
       return nameA.localeCompare(nameB);
     });
 
-    return { success: true, data: initialAttendance };
+    return { success: true, data: filterRowsByStudentScope(initialAttendance, studentScope) };
   } catch {
     return { error: "Erreur lors du chargement de la feuille d'appel." };
   }
@@ -480,6 +491,10 @@ export async function getAttendanceSummaryAction(
   );
   if (!estId) return { error: "Établissement requis." };
 
+  if (!canSeeStudent(await resolveStudentScope(), studentId)) {
+    return { error: "Vous n'avez pas accès aux présences de cet élève." };
+  }
+
   try {
     const db = await getDb();
 
@@ -550,6 +565,7 @@ export async function getAttendanceStatsAction(
     const { data: students, error: studErr } = await db
       .from("students")
       .select("id, student_number, user:users(name)")
+      .eq("establishment_id", estId)
       .eq("classroom_id", classroomId)
       .eq("status", "active");
 
@@ -592,7 +608,8 @@ export async function getAttendanceStatsAction(
     // Sort by highest absence rate first
     result.sort((a: { absence_rate: number }, b: { absence_rate: number }) => b.absence_rate - a.absence_rate);
 
-    return { success: true, data: result };
+    const studentScope = await resolveStudentScope();
+    return { success: true, data: filterRowsByStudentScope(result, studentScope) };
   } catch {
     return { error: "Erreur lors du calcul des statistiques d'absences." };
   }
@@ -654,8 +671,13 @@ export async function getAttendanceLogsAction(input: {
       .eq("establishment_id", estId)
       .order("date", { ascending: false });
 
-    // Restrict teachers to their own recorded attendance logs
-    if (!isAdmin(session.user.role as SystemRole)) {
+    // Parent / élève : uniquement les présences de leurs propres élèves.
+    // Autres non-admins (enseignants) : uniquement les appels qu'ils ont faits.
+    const studentScope = await resolveStudentScope();
+    if (studentScope.kind === "ids") {
+      if (studentScope.ids.length === 0) return { success: true, data: [] };
+      query = query.in("student_id", studentScope.ids);
+    } else if (!isAdmin(session.user.role as SystemRole)) {
       query = query.eq("recorded_by", session.user.id);
     }
 

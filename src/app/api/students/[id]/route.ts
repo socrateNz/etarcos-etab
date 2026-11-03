@@ -1,108 +1,76 @@
-import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import {
+  getStudentByIdAction,
+  updateStudentAction,
+  deleteStudentAction,
+} from "@/features/students/actions";
+
+// Toutes les opérations passent par les Server Actions, qui vérifient la
+// permission (students:view/edit/delete), l'établissement de l'appelant et le
+// périmètre parent / élève. Ces routes ne vérifiaient auparavant que la
+// connexion : n'importe quel compte pouvait lire, modifier ou supprimer
+// n'importe quel élève de n'importe quel établissement.
+
+function statusFor(error: string): number {
+  if (error === "Non autorisé.") return 401;
+  if (error === "Permission refusée." || error.startsWith("Vous n'avez pas accès")) return 403;
+  if (error.includes("introuvable")) return 404;
+  return 400;
+}
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
-  // Get student by ID
-  try {
-    const supabase = (await createAdminClient()) as any;
-    const { data, error } = await supabase
-      .from("students")
-      .select("id, student_number, enrollment_date, status, classroom_id, user:users(name)")
-      .eq("id", id)
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({
-      data: {
-        id: data.id,
-        student_number: data.student_number,
-        name: data.user?.name || "Sans nom",
-        classroom_id: data.classroom_id,
-        enrollment_date: data.enrollment_date,
-        status: data.status,
-      }
-    });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
+  const res = await getStudentByIdAction(id);
+  if (res.error || !res.data) {
+    const error = res.error ?? "Élève introuvable.";
+    return NextResponse.json({ error }, { status: statusFor(error) });
   }
+
+  const s = res.data;
+  return NextResponse.json({
+    data: {
+      id: s.id,
+      student_number: s.student_number,
+      name: s.user?.name || "Sans nom",
+      classroom_id: s.classroom_id,
+      enrollment_date: s.enrollment_date,
+      status: s.status,
+    },
+  });
 }
 
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
+
+  let body: { name?: unknown; classroom_id?: unknown; status?: unknown };
   try {
-    const body = await req.json();
-    const { name, classroom_id, status } = body;
-
-    const supabase = (await createAdminClient()) as any;
-    
-    // 1. Fetch student to get user_id
-    const { data: student } = await supabase
-      .from("students")
-      .select("user_id")
-      .eq("id", id)
-      .single();
-
-    if (student?.user_id) {
-      // Update user name
-      await supabase
-        .from("users")
-        .update({ name } as any)
-        .eq("id", student.user_id);
-    }
-
-    // 2. Update student fields
-    const { data, error } = await supabase
-      .from("students")
-      .update({ classroom_id, status } as any)
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return NextResponse.json({ success: true, data });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Corps de requête JSON invalide" }, { status: 400 });
   }
+
+  const res = await updateStudentAction(id, {
+    ...(typeof body.name === "string" ? { name: body.name } : {}),
+    ...(body.classroom_id !== undefined ? { classroom_id: body.classroom_id as string | null } : {}),
+    ...(body.status !== undefined ? { status: body.status as never } : {}),
+  });
+
+  if (res.error) return NextResponse.json({ error: res.error }, { status: statusFor(res.error) });
+  return NextResponse.json({ success: true, data: res.data });
 }
 
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
-
   const { id } = await params;
-  try {
-    const supabase = (await createAdminClient()) as any;
-    const { error } = await supabase
-      .from("students")
-      .delete()
-      .eq("id", id);
-
-    if (error) throw error;
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur inattendue." }, { status: 500 });
-  }
+  const res = await deleteStudentAction(id);
+  if (res.error) return NextResponse.json({ error: res.error }, { status: statusFor(res.error) });
+  return NextResponse.json({ success: true });
 }
